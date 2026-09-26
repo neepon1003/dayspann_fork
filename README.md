@@ -11,7 +11,7 @@ dayspann lets you choose meaningful dates from your past records or future plans
 dayspann does not automatically analyze your vault. You choose what becomes an anniversary.
 
 > [!NOTE]
-> dayspann is currently available as a public beta through GitHub and BRAT. It is not yet available in the Obsidian Community Plugins directory.
+> dayspann can be installed through GitHub and BRAT. Once it appears in the Obsidian Community Plugins directory, it can also be installed and updated directly from Obsidian.
 > The interface follows Obsidian's display language in Japanese and English, with English used as the fallback for other languages.
 > See the [beta testing guide](BETA_TESTING.md) for installation, checks, and reporting.
 
@@ -68,14 +68,24 @@ As a result, the name also contains **day span**: the span between the chosen da
 
 ## Installation
 
-### BRAT (recommended during beta)
+### Obsidian Community Plugins
+
+After dayspann appears in the Community Plugins directory:
+
+1. Open **Settings → Community plugins** in Obsidian.
+2. Select **Browse** and search for `dayspann`.
+3. Choose **Install**, then **Enable**.
+
+Until the listing is available, use BRAT or manual installation below.
+
+### BRAT
 
 1. Install and enable **BRAT** from Obsidian's Community Plugins directory.
 2. Open **Settings → BRAT** and choose **Add beta plugin**.
 3. Enter `shingotanaka0115/dayspann` as the repository.
 4. Enable **dayspann** under **Settings → Community plugins**.
 
-BRAT can check GitHub releases and install later beta updates. dayspann releases follow semantic versions without a `v` prefix, such as `0.1.7`.
+BRAT can check GitHub releases and install later updates. dayspann releases follow semantic versions without a `v` prefix, such as `1.0.0`.
 
 ### Manual installation
 
@@ -85,8 +95,6 @@ BRAT can check GitHub releases and install later beta updates. dayspann releases
 4. Reload Obsidian and enable **dayspann** under **Settings → Community plugins**.
 
 The internal plugin ID and the manual installation folder are both `dayspann`.
-
-Direct installation through the Community Plugins directory will be added after the initial review is complete.
 
 ## Development
 

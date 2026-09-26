@@ -2,6 +2,12 @@
 
 All notable changes to dayspann will be documented in this file.
 
+## 1.0.0
+
+- Prepare the tested core feature set for submission to the Obsidian Community Plugins directory.
+- Confirm use on macOS, Windows, and iPhone through public beta testing.
+- Keep dayspann fully local and offline, without external services, telemetry, or advertisements.
+
 ## 0.1.8
 
 - Archive entries without deleting their Markdown files or source-note links.

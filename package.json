@@ -1,6 +1,6 @@
 {
   "name": "dayspann",
-  "version": "0.1.8",
+  "version": "1.0.0",
   "private": true,
   "description": "Pan through your Markdown notes to uncover meaningful dates, then see the span between each one and today.",
   "main": "main.js",

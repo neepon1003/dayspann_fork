@@ -151,13 +151,13 @@ test("期間単位と日付を日本語・英語で表示する", () => {
 });
 
 test("登録元をクリックできる内部リンクとして保存し、従来のパスも読み込める", () => {
-  const path = "08_Journals/2026-09-14.md";
+  const path = "Journal/2026-09-14.md";
   const link = formatSourceReference(path);
 
-  assert.equal(link, "[[08_Journals/2026-09-14.md]]");
+  assert.equal(link, "[[Journal/2026-09-14.md]]");
   assert.equal(parseSourceReference(link), path);
   assert.equal(parseSourceReference(path), path);
-  assert.equal(parseSourceReference("[[08_Journals/2026-09-14.md|元メモ]]"), path);
+  assert.equal(parseSourceReference("[[Journal/2026-09-14.md|元メモ]]"), path);
   assert.equal(isLinkedSourceReference(link), true);
   assert.equal(isLinkedSourceReference(path), false);
 });
