@@ -54,7 +54,7 @@ export interface DayspannSettings {
 }
 
 const DEFAULT_SETTINGS: DayspannSettings = {
-  storageFolder: "dayspann",
+  storageFolder: "pj-span",
   futureColor: "#2ea8ff",
   pastColor: "#f59e0b",
   sectionOrder: [...DEFAULT_SECTION_ORDER],
@@ -348,10 +348,12 @@ export default class DayspannPlugin extends Plugin {
   private async loadSettings(): Promise<void> {
     const saved = (await this.loadData()) as Partial<DayspannSettings> | null;
     const savedStorageFolder = saved?.storageFolder?.trim();
-    const legacyStorageFolder = "Dayspan";
+    const legacyStorageFolder = ["dayspann", "Dayspan"].find((folder) =>
+      this.app.vault.getAbstractFileByPath(folder)
+    );
     const storageFolder = savedStorageFolder
       ? savedStorageFolder
-      : this.app.vault.getAbstractFileByPath(legacyStorageFolder) &&
+      : legacyStorageFolder &&
           !this.app.vault.getAbstractFileByPath(DEFAULT_SETTINGS.storageFolder)
         ? legacyStorageFolder
         : DEFAULT_SETTINGS.storageFolder;

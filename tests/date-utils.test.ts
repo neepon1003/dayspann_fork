@@ -130,7 +130,7 @@ test("日本語と英語の表示文言を切り替える", () => {
   assert.equal(createTranslator("en")("section.future"), "Days remaining");
   assert.equal(
     createTranslator("ja")("view.emptyDescription"),
-    "文章を選択して、コマンドまたは右クリックから「dayspannに登録」を実行してください。"
+    "文章を選択して、コマンドまたは右クリックから「PJ-spanに登録」を実行してください。"
   );
   assert.equal(
     createTranslator("en")("view.openRecord", { title: "Sample event" }),

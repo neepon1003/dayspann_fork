@@ -32,7 +32,7 @@ export interface DayspannDraft {
 
 export function serializeRecord(draft: DayspannDraft): string {
   const frontmatter: Record<string, string | number | boolean> = {
-    type: "dayspann",
+    type: "pj-span",
     title: draft.title.trim(),
     date: draft.date,
     display: draft.displayMode ?? DEFAULT_DISPLAY_MODE,
@@ -59,8 +59,8 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     return null;
   }
 
-  // Read pre-0.1.7 beta records so they can be migrated safely.
-  if (data.type !== "dayspann" && data.type !== "dayspan") return null;
+  // Also read records made before the rename to PJ-span ("dayspann") and pre-0.1.7 beta records ("dayspan").
+  if (data.type !== "pj-span" && data.type !== "dayspann" && data.type !== "dayspan") return null;
   const title = typeof data.title === "string" ? data.title.trim() : "";
   const date =
     data.date instanceof Date

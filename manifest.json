@@ -1,9 +1,10 @@
 {
-  "id": "dayspann",
-  "name": "dayspann",
+  "id": "pj-span",
+  "name": "PJ-span",
   "version": "1.0.0",
   "minAppVersion": "1.13.0",
-  "description": "Pan through your Markdown notes to uncover meaningful dates, then see the span between each one and today.",
-  "author": "Shingo Tanaka",
+  "description": "Track project deadlines and see how many days are left until each one.",
+  "author": "minamimoto masanobu",
+  "authorUrl": "https://github.com/neepon1003",
   "isDesktopOnly": false
 }

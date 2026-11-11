@@ -9,7 +9,7 @@ import { durationUnit } from "./i18n";
 import { DayspannRecord } from "./model";
 import { DayspannSectionKind } from "./settings";
 
-export const DAYSPANN_VIEW_TYPE = "dayspann-view";
+export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 
 interface CountedRecord {
   record: DayspannRecord;
@@ -32,7 +32,7 @@ export class DayspannView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "dayspann";
+    return "PJ-span";
   }
 
   getIcon(): string {
@@ -66,7 +66,7 @@ export class DayspannView extends ItemView {
 
     const header = root.createDiv("dayspann-header");
     const heading = header.createDiv("dayspann-heading");
-    heading.createEl("h2", { text: "dayspann" });
+    heading.createEl("h2", { text: "PJ-span" });
     heading.createEl("p", {
       cls: "dayspann-tagline",
       text: this.plugin.t("view.tagline"),

@@ -34,7 +34,7 @@ export default defineConfig(
       "obsidianmd/ui/sentence-case": [
         "warn",
         {
-          brands: ["dayspann"],
+          brands: ["dayspann", "PJ-span"],
           enforceCamelCaseLower: true,
         },
       ],

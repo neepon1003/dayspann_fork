@@ -1,8 +1,8 @@
 {
-  "name": "dayspann",
+  "name": "pj-span",
   "version": "1.0.0",
   "private": true,
-  "description": "Pan through your Markdown notes to uncover meaningful dates, then see the span between each one and today.",
+  "description": "Track project deadlines and see how many days are left until each one.",
   "main": "main.js",
   "type": "module",
   "scripts": {
