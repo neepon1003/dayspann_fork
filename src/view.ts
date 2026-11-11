@@ -201,7 +201,6 @@ export class DayspannView extends ItemView {
     const card = list.createDiv("dayspann-card");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", this.plugin.t("view.openRecord", { title: record.title }));
     card.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -245,8 +244,7 @@ export class DayspannView extends ItemView {
 
     const count = card.createDiv("dayspann-count");
     if (difference === 0) {
-      count.createSpan({ text: "0", cls: "dayspann-count-number" });
-      count.createSpan({ text: this.plugin.t("section.today"), cls: "dayspann-count-unit" });
+      count.createSpan({ text: this.plugin.t("view.dueToday"), cls: "dayspann-count-today" });
     } else {
       const parts = formatDateSpan(record.date, this.plugin.todayKey(), record.displayMode);
       if (parts.length > 1) count.addClass("dayspann-count--compound");

@@ -1,6 +1,6 @@
 export type DayspannSectionKind = "future" | "today" | "past";
 
-export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["future", "today", "past"];
+export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["today", "future", "past"];
 
 const SECTION_KINDS = new Set<DayspannSectionKind>(DEFAULT_SECTION_ORDER);
 

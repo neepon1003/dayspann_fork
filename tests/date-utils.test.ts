@@ -102,11 +102,11 @@ test("セクションの並び順を保存値から復元する", () => {
 });
 
 test("古い設定や不正な並び順には不足項目を補う", () => {
-  assert.deepEqual(normalizeSectionOrder(undefined), ["future", "today", "past"]);
+  assert.deepEqual(normalizeSectionOrder(undefined), ["today", "future", "past"]);
   assert.deepEqual(normalizeSectionOrder(["past", "past", "unknown"]), [
     "past",
-    "future",
     "today",
+    "future",
   ]);
 });
 
@@ -126,7 +126,7 @@ test("Obsidianの日本語設定だけを日本語として扱い、それ以外
 });
 
 test("日本語と英語の表示文言を切り替える", () => {
-  assert.equal(createTranslator("ja")("section.future"), "あと何日");
+  assert.equal(createTranslator("ja")("section.future"), "期日まで");
   assert.equal(createTranslator("en")("section.future"), "Days remaining");
   assert.equal(
     createTranslator("ja")("view.emptyDescription"),

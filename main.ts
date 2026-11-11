@@ -55,8 +55,8 @@ export interface DayspannSettings {
 
 const DEFAULT_SETTINGS: DayspannSettings = {
   storageFolder: "pj-span",
-  futureColor: "#2ea8ff",
-  pastColor: "#f59e0b",
+  futureColor: "#22c55e",
+  pastColor: "#ef4444",
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   collapsedSections: [],
   archiveCollapsed: true,
