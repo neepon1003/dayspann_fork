@@ -500,3 +500,44 @@
   grid-area: more;
   align-self: start;
 }
+
+.dayspann-deadline {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+}
+
+.dayspann-deadline--overdue {
+  color: var(--text-error);
+}
+
+.dayspann-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.dayspann-progress {
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--background-modifier-border);
+}
+
+.dayspann-progress-fill {
+  width: var(--dayspann-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dayspann-accent);
+}
+
+.dayspann-progress-label {
+  min-width: 3em;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

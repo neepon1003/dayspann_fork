@@ -235,6 +235,7 @@ export default class DayspannPlugin extends Plugin {
         sourcePath: record.sourcePath,
         sourceLine: record.sourceLine,
         created: record.created,
+        deadline: record.deadline,
       },
       this.t("modal.edit"),
       this.t("action.save"),

@@ -78,6 +78,14 @@ const JA_MESSAGES = {
   "setting.calculationDesc": "日数はカレンダー日で計算します。基準日と今日が同じ日は0日です。",
   "default.newEntry": "新しい記録",
   "default.entry": "記録",
+  "modal.deadline": "締め切り日",
+  "modal.deadlineDesc": "基準日を開始日として、締め切りまでの進み具合を表示します。空欄なら表示しません",
+  "view.deadlineRemaining": "締め切りまであと{days}日",
+  "view.deadlineToday": "今日が締め切り",
+  "view.deadlineOverdue": "締め切りを{days}日過ぎています",
+  "view.progress": "進み具合 {percent}%",
+  "error.deadlineInvalid": "締め切り日を YYYY-MM-DD 形式で入力してください",
+  "error.deadlineNotAfterDate": "締め切り日は基準日より後の日にしてください",
 } as const;
 
 export type TranslationKey = keyof typeof JA_MESSAGES;
@@ -160,6 +168,14 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "setting.calculationDesc": "Days are counted as calendar days. A reference date matching today is 0 days.",
   "default.newEntry": "New entry",
   "default.entry": "Entry",
+  "modal.deadline": "Deadline",
+  "modal.deadlineDesc": "Shows progress from the reference date to this deadline. Leave empty to hide it.",
+  "view.deadlineRemaining": "{days} days until the deadline",
+  "view.deadlineToday": "Deadline is today",
+  "view.deadlineOverdue": "{days} days past the deadline",
+  "view.progress": "Progress {percent}%",
+  "error.deadlineInvalid": "Enter the deadline in YYYY-MM-DD format.",
+  "error.deadlineNotAfterDate": "The deadline must be after the reference date.",
 };
 
 export type TranslationVariables = Record<string, string | number>;

@@ -60,6 +60,16 @@ export class DayspannEntryModal extends Modal {
       });
 
     new Setting(contentEl)
+      .setName(this.t("modal.deadline"))
+      .setDesc(this.t("modal.deadlineDesc"))
+      .addText((text) => {
+        text.inputEl.type = "date";
+        text.setValue(this.draft.deadline ?? "").onChange((value) => {
+          this.draft.deadline = value || undefined;
+        });
+      });
+
+    new Setting(contentEl)
       .setName(this.t("modal.display"))
       .setDesc(this.t("modal.displayDesc"))
       .addDropdown((dropdown) => {
@@ -143,6 +153,16 @@ export class DayspannEntryModal extends Modal {
     if (!parseDateKey(this.draft.date)) {
       this.showError(this.t("error.dateInvalid"));
       return;
+    }
+    if (this.draft.deadline) {
+      if (!parseDateKey(this.draft.deadline)) {
+        this.showError(this.t("error.deadlineInvalid"));
+        return;
+      }
+      if (this.draft.deadline <= this.draft.date) {
+        this.showError(this.t("error.deadlineNotAfterDate"));
+        return;
+      }
     }
 
     button.disabled = true;

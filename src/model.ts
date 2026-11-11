@@ -17,6 +17,7 @@ export interface DayspannRecord {
   sourcePath?: string;
   sourceLine?: number;
   created: string;
+  deadline?: string;
 }
 
 export interface DayspannDraft {
@@ -28,6 +29,7 @@ export interface DayspannDraft {
   sourcePath?: string;
   sourceLine?: number;
   created?: string;
+  deadline?: string;
 }
 
 export function serializeRecord(draft: DayspannDraft): string {
@@ -42,6 +44,7 @@ export function serializeRecord(draft: DayspannDraft): string {
   if (draft.archived) frontmatter.archived = true;
   if (draft.sourcePath) frontmatter.source = formatSourceReference(draft.sourcePath);
   if (typeof draft.sourceLine === "number") frontmatter.sourceLine = draft.sourceLine;
+  if (draft.deadline) frontmatter.deadline = draft.deadline;
 
   const yaml = stringifyYaml(frontmatter).replace(/\s+$/, "");
   const body = draft.excerpt.trim();
@@ -70,6 +73,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
         : "";
   if (!title || !parseDateKey(date)) return null;
 
+  const deadline = readDateKey(data.deadline);
   const sourceLine = Number(data.sourceLine);
   return {
     file,
@@ -81,7 +85,13 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     sourcePath: parseSourceReference(data.source),
     sourceLine: Number.isInteger(sourceLine) && sourceLine > 0 ? sourceLine : undefined,
     created: typeof data.created === "string" ? data.created : "",
+    deadline: parseDateKey(deadline) ? deadline : undefined,
   };
+}
+
+function readDateKey(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return typeof value === "string" ? value : "";
 }
 
 export function makeTitleFromSelection(

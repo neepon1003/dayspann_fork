@@ -7,6 +7,7 @@ import {
 } from "./date-utils";
 import { durationUnit } from "./i18n";
 import { DayspannRecord } from "./model";
+import { calculateProgress } from "./project";
 import { DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "dayspann-view";
@@ -239,6 +240,7 @@ export class DayspannView extends ItemView {
       text: formatLocalizedDate(record.date, this.plugin.locale()),
       cls: "dayspann-card-date",
     });
+    if (record.deadline) this.renderDeadline(content, record.date, record.deadline);
     if (record.excerpt) {
       content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
     }
@@ -283,6 +285,33 @@ export class DayspannView extends ItemView {
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
+  }
+
+  private renderDeadline(content: HTMLElement, date: string, deadline: string): void {
+    const today = this.plugin.todayKey();
+    const remaining = differenceInCalendarDays(deadline, today);
+    const text =
+      remaining > 0
+        ? this.plugin.t("view.deadlineRemaining", { days: remaining })
+        : remaining === 0
+          ? this.plugin.t("view.deadlineToday")
+          : this.plugin.t("view.deadlineOverdue", { days: Math.abs(remaining) });
+    content.createDiv({
+      text,
+      cls: `dayspann-deadline${remaining < 0 ? " dayspann-deadline--overdue" : ""}`,
+    });
+
+    const progress = calculateProgress(date, deadline, today);
+    if (progress === null) return;
+    const row = content.createDiv("dayspann-progress-row");
+    const bar = row.createDiv({
+      cls: "dayspann-progress",
+      attr: { "aria-label": this.plugin.t("view.progress", { percent: progress }) },
+    });
+    bar.createDiv("dayspann-progress-fill").setCssProps({
+      "--dayspann-progress": `${progress}%`,
+    });
+    row.createSpan({ text: `${progress}%`, cls: "dayspann-progress-label" });
   }
 
   private addArchiveMenuItem(menu: Menu, record: DayspannRecord): void {

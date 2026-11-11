@@ -9,6 +9,7 @@ import {
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
+import { calculateProgress } from "../src/project";
 import { normalizeCollapsedSections, normalizeSectionOrder } from "../src/settings";
 import {
   formatSourceReference,
@@ -160,4 +161,18 @@ test("登録元をクリックできる内部リンクとして保存し、従�
   assert.equal(parseSourceReference("[[Journal/2026-09-14.md|元メモ]]"), path);
   assert.equal(isLinkedSourceReference(link), true);
   assert.equal(isLinkedSourceReference(path), false);
+});
+
+test("進み具合は基準日0%・締め切り日100%で、範囲外は0〜100に収める", () => {
+  assert.equal(calculateProgress("2026-11-01", "2026-11-11", "2026-11-01"), 0);
+  assert.equal(calculateProgress("2026-11-01", "2026-11-11", "2026-11-06"), 50);
+  assert.equal(calculateProgress("2026-11-01", "2026-11-11", "2026-11-11"), 100);
+  assert.equal(calculateProgress("2026-11-01", "2026-11-11", "2026-10-20"), 0);
+  assert.equal(calculateProgress("2026-11-01", "2026-11-11", "2026-12-01"), 100);
+});
+
+test("締め切り日が基準日以前か、日付が正しくなければ進み具合を出さない", () => {
+  assert.equal(calculateProgress("2026-11-11", "2026-11-11", "2026-11-11"), null);
+  assert.equal(calculateProgress("2026-11-11", "2026-11-01", "2026-11-05"), null);
+  assert.equal(calculateProgress("2026-11-01", "bad", "2026-11-05"), null);
 });
