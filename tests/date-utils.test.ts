@@ -7,6 +7,7 @@ import {
   formatLocalizedDate,
   normalizeDisplayMode,
   parseDateKey,
+  readDateKey,
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
@@ -33,6 +34,14 @@ test("うるう年をカレンダー日として数える", () => {
 test("存在しない日付は受け付けない", () => {
   assert.equal(parseDateKey("2026-02-29"), null);
   assert.equal(parseDateKey("2026-9-1"), null);
+});
+
+test("文字列やDateからYYYY-MM-DDを読み取る", () => {
+  assert.equal(readDateKey("2026-11-13"), "2026-11-13");
+  assert.equal(readDateKey(new Date("2026-11-13T00:00:00.000Z")), "2026-11-13");
+  assert.equal(readDateKey("2026-02-29"), "");
+  assert.equal(readDateKey(""), "");
+  assert.equal(readDateKey(undefined), "");
 });
 
 test("ローカル日付をYYYY-MM-DDにする", () => {

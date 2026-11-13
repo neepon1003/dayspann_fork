@@ -48,6 +48,16 @@ export function parseDateKey(value: string): CalendarDate | null {
   return { year, month, day };
 }
 
+export function readDateKey(value: unknown): string {
+  const raw =
+    value instanceof Date
+      ? value.toISOString().slice(0, 10)
+      : typeof value === "string"
+        ? value.trim()
+        : "";
+  return parseDateKey(raw) ? raw : "";
+}
+
 export function toDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

@@ -233,6 +233,7 @@ export default class DayspannPlugin extends Plugin {
         date: record.date,
         displayMode: record.displayMode,
         archived: record.archived,
+        completed: record.completed,
         excerpt: record.excerpt,
         sourcePath: record.sourcePath,
         sourceLine: record.sourceLine,
@@ -263,8 +264,10 @@ export default class DayspannPlugin extends Plugin {
       (frontmatter: Record<string, unknown>) => {
         if (archived) {
           frontmatter.archived = true;
+          frontmatter.completed = this.todayKey();
         } else {
           delete frontmatter.archived;
+          delete frontmatter.completed;
         }
       }
     );

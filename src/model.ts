@@ -4,6 +4,7 @@ import {
   DayspannDisplayMode,
   normalizeDisplayMode,
   parseDateKey,
+  readDateKey,
 } from "./date-utils";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 
@@ -13,6 +14,7 @@ export interface DayspannRecord {
   date: string;
   displayMode: DayspannDisplayMode;
   archived: boolean;
+  completed?: string;
   excerpt: string;
   sourcePath?: string;
   sourceLine?: number;
@@ -24,6 +26,7 @@ export interface DayspannDraft {
   date: string;
   displayMode?: DayspannDisplayMode;
   archived?: boolean;
+  completed?: string;
   excerpt: string;
   sourcePath?: string;
   sourceLine?: number;
@@ -40,6 +43,7 @@ export function serializeRecord(draft: DayspannDraft): string {
   };
 
   if (draft.archived) frontmatter.archived = true;
+  if (draft.completed) frontmatter.completed = draft.completed;
   if (draft.sourcePath) frontmatter.source = formatSourceReference(draft.sourcePath);
   if (typeof draft.sourceLine === "number") frontmatter.sourceLine = draft.sourceLine;
 
@@ -85,6 +89,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     date,
     displayMode: normalizeDisplayMode(data.display),
     archived: data.archived === true,
+    completed: readDateKey(data.completed) || undefined,
     excerpt: match[2].trim(),
     sourcePath: parseSourceReference(data.source),
     sourceLine: Number.isInteger(sourceLine) && sourceLine > 0 ? sourceLine : undefined,
