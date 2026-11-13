@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  compareArchiveOrder,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
+  formatCompletedBadgeDate,
   formatDateSpan,
   formatLocalizedDate,
   normalizeDisplayMode,
@@ -42,6 +44,19 @@ test("文字列やDateからYYYY-MM-DDを読み取る", () => {
   assert.equal(readDateKey("2026-02-29"), "");
   assert.equal(readDateKey(""), "");
   assert.equal(readDateKey(undefined), "");
+});
+
+test("完了バッジの日付は今年なら月日、別の年なら年月日にする", () => {
+  assert.equal(formatCompletedBadgeDate("2026-11-13", "2026-11-13"), "11/13");
+  assert.equal(formatCompletedBadgeDate("2025-12-01", "2026-11-13"), "2025/12/1");
+  assert.equal(formatCompletedBadgeDate("bad", "2026-11-13"), "");
+});
+
+test("アーカイブは完了日が新しい順で、完了日がないものは後ろになる", () => {
+  assert.ok(compareArchiveOrder("2026-11-12", "2026-11-10", "2026-10-01", "2026-10-20") < 0);
+  assert.ok(compareArchiveOrder(undefined, "2026-11-10", "2026-10-01", "2026-10-20") > 0);
+  assert.ok(compareArchiveOrder("2026-11-10", "2026-11-10", "2026-10-20", "2026-10-01") < 0);
+  assert.ok(compareArchiveOrder(undefined, undefined, "2026-10-20", "2026-10-01") < 0);
 });
 
 test("ローカル日付をYYYY-MM-DDにする", () => {

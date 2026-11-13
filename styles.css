@@ -268,9 +268,16 @@
 
 .dayspann-count-today,
 .dayspann-count-done {
-  font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.dayspann-count-today {
+  font-size: 1.15rem;
+}
+
+.dayspann-count-done {
+  font-size: 1rem;
 }
 
 .dayspann-count-unit {
@@ -463,9 +470,12 @@
   font-size: 1.45rem;
 }
 
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-today,
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-done {
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-today {
   font-size: 1.05rem;
+}
+
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-done {
+  font-size: 0.9rem;
 }
 
 .dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count--compound {
@@ -543,9 +553,12 @@
   font-size: 1.25rem;
 }
 
-.dayspann-view.dayspann-is-extra-narrow .dayspann-count-today,
-.dayspann-view.dayspann-is-extra-narrow .dayspann-count-done {
+.dayspann-view.dayspann-is-extra-narrow .dayspann-count-today {
   font-size: 1rem;
+}
+
+.dayspann-view.dayspann-is-extra-narrow .dayspann-count-done {
+  font-size: 0.85rem;
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-count-unit,

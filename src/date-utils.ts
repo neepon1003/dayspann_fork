@@ -58,6 +58,30 @@ export function readDateKey(value: unknown): string {
   return parseDateKey(raw) ? raw : "";
 }
 
+/** 完了バッジ用の日付。今年なら 11/13、別の年なら 2025/12/1。 */
+export function formatCompletedBadgeDate(completedDateKey: string, todayDateKey: string): string {
+  const completed = parseDateKey(completedDateKey);
+  const today = parseDateKey(todayDateKey);
+  if (!completed || !today) return "";
+  if (completed.year === today.year) return `${completed.month}/${completed.day}`;
+  return `${completed.year}/${completed.month}/${completed.day}`;
+}
+
+/** アーカイブの並び：完了日が新しい順。完了日がないものは後ろ、同じなら締め切りが新しい順。 */
+export function compareArchiveOrder(
+  aCompleted: string | undefined,
+  bCompleted: string | undefined,
+  aDeadline: string,
+  bDeadline: string
+): number {
+  const a = aCompleted ?? "";
+  const b = bCompleted ?? "";
+  if (a && b) return b.localeCompare(a) || bDeadline.localeCompare(aDeadline);
+  if (a) return -1;
+  if (b) return 1;
+  return bDeadline.localeCompare(aDeadline);
+}
+
 export function toDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

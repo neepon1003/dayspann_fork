@@ -1,8 +1,10 @@
 import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
 import type DayspannPlugin from "../main";
 import {
+  compareArchiveOrder,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
+  formatCompletedBadgeDate,
   formatDateSpan,
   formatLocalizedDate,
 } from "./date-utils";
@@ -133,7 +135,14 @@ export class DayspannView extends ItemView {
       .sort((a, b) => a.record.title.localeCompare(b.record.title));
     const archived = counted
       .filter((item) => item.record.archived)
-      .sort((a, b) => b.record.date.localeCompare(a.record.date));
+      .sort((a, b) =>
+        compareArchiveOrder(
+          a.record.completed,
+          b.record.completed,
+          a.record.date,
+          b.record.date
+        )
+      );
     const future = active
       .filter((item) => item.difference > 0)
       .sort((a, b) => a.difference - b.difference || a.record.date.localeCompare(b.record.date));
@@ -294,7 +303,15 @@ export class DayspannView extends ItemView {
 
     const count = card.createDiv("dayspann-count");
     if (record.archived) {
-      count.createSpan({ text: this.plugin.t("view.done"), cls: "dayspann-count-done" });
+      const completedDate = record.completed
+        ? formatCompletedBadgeDate(record.completed, this.plugin.todayKey())
+        : "";
+      count.createSpan({
+        text: completedDate
+          ? this.plugin.t("view.doneOn", { date: completedDate })
+          : this.plugin.t("view.done"),
+        cls: "dayspann-count-done",
+      });
     } else if (difference === null) {
       count.createSpan({ text: this.plugin.t("view.noDate"), cls: "dayspann-count-today" });
     } else if (difference === 0) {
