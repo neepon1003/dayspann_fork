@@ -2,6 +2,7 @@
   --dayspann-accent: var(--interactive-accent);
   --dayspann-future-color: #22c55e;
   --dayspann-past-color: #ef4444;
+  --dayspann-soon-color: #f97316;
   padding: 20px clamp(14px, 4vw, 40px) 44px;
   overflow-y: auto;
 }
@@ -21,6 +22,10 @@
 .dayspann-section--undated,
 .dayspann-section--archive {
   --dayspann-accent: var(--text-muted);
+}
+
+.dayspann-card--soon {
+  --dayspann-accent: var(--dayspann-soon-color);
 }
 
 .dayspann-header {
