@@ -291,7 +291,13 @@ export class DayspannView extends ItemView {
        }		
     }
 
-    const more = this.iconButton(card, "ellipsis", this.plugin.t("action.actions"), () => undefined);
+    const actions = card.createDiv("dayspann-card-actions");
+    if (!record.archived) {
+      this.iconButton(actions, "check", this.plugin.t("action.complete"), () => {
+        void this.plugin.setRecordArchived(record, true);
+      });
+    }
+    const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = new Menu();
