@@ -283,6 +283,12 @@ export class DayspannView extends ItemView {
           cls: "dayspann-count-unit",
         });
       }
+      if (difference < 0) {
+	count.createSpan({
+	 text: this.plugin.t("view.overdueSuffix"),
+	 cls: "dayspann-count-unit dayspann-count-suffix",
+	});
+       }		
     }
 
     const more = this.iconButton(card, "ellipsis", this.plugin.t("action.actions"), () => undefined);
