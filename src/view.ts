@@ -14,8 +14,6 @@ import { DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 
-const SOON_DAYS = 7;
-
 interface CountedRecord {
   record: DayspannRecord;
   difference: number | null;
@@ -250,7 +248,7 @@ export class DayspannView extends ItemView {
   private renderCard(list: HTMLElement, item: CountedRecord): void {
     const { record, difference } = item;
     const card = list.createDiv("dayspann-card");
-    if (difference !== null && difference >= 1 && difference <= SOON_DAYS) {
+    if (difference !== null && difference >= 1 && difference <= this.plugin.settings.soonDays) {
 	card.addClass("dayspann-card--soon");
     }	
     if (record.archived) {

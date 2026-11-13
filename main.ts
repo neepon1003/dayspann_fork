@@ -33,9 +33,12 @@ import {
 } from "./src/model";
 import {
   DEFAULT_SECTION_ORDER,
+  DEFAULT_SOON_DAYS,
   DayspannSectionKind,
+  MAX_SOON_DAYS,
   normalizeCollapsedSections,
   normalizeSectionOrder,
+  parseSoonDays,
 } from "./src/settings";
 import {
   formatSourceReference,
@@ -48,6 +51,7 @@ export interface DayspannSettings {
   storageFolder: string;
   futureColor: string;
   pastColor: string;
+  soonDays: number;
   sectionOrder: DayspannSectionKind[];
   collapsedSections: DayspannSectionKind[];
   undatedCollapsed: boolean;
@@ -58,6 +62,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   storageFolder: "pj-span",
   futureColor: "#22c55e",
   pastColor: "#ef4444",
+  soonDays: DEFAULT_SOON_DAYS,
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   collapsedSections: [],
   undatedCollapsed: false,
@@ -371,6 +376,7 @@ export default class DayspannPlugin extends Plugin {
       ...DEFAULT_SETTINGS,
       ...saved,
       storageFolder,
+      soonDays: parseSoonDays(saved?.soonDays) ?? DEFAULT_SOON_DAYS,
       sectionOrder: normalizeSectionOrder(saved?.sectionOrder),
       collapsedSections: normalizeCollapsedSections(saved?.collapsedSections),
       undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
@@ -591,6 +597,21 @@ class DayspannSettingTab extends PluginSettingTab {
                 );
             },
           },
+          {
+            name: this.plugin.t("setting.soonDays"),
+            desc: this.plugin.t("setting.soonDaysDesc"),
+            render: (setting) => {
+              setting.addText((text) => {
+                text.inputEl.type = "number";
+                text.inputEl.min = "0";
+                text.inputEl.max = String(MAX_SOON_DAYS);
+                text
+                  .setPlaceholder(String(DEFAULT_SOON_DAYS))
+                  .setValue(String(this.plugin.settings.soonDays))
+                  .onChange((value) => void this.setSoonDays(value));
+              });
+            },
+          },
         ],
       },
       {
@@ -637,6 +658,14 @@ class DayspannSettingTab extends PluginSettingTab {
     value: string
   ): Promise<void> {
     this.plugin.settings[key] = value;
+    await this.plugin.saveSettings();
+    await this.plugin.refreshViews();
+  }
+
+  private async setSoonDays(value: string): Promise<void> {
+    const days = parseSoonDays(value);
+    if (days === null) return;
+    this.plugin.settings.soonDays = days;
     await this.plugin.saveSettings();
     await this.plugin.refreshViews();
   }

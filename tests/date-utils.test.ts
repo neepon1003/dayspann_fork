@@ -13,7 +13,11 @@ import {
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
-import { normalizeCollapsedSections, normalizeSectionOrder } from "../src/settings";
+import {
+  normalizeCollapsedSections,
+  normalizeSectionOrder,
+  parseSoonDays,
+} from "../src/settings";
 import {
   formatSourceReference,
   isLinkedSourceReference,
@@ -147,6 +151,18 @@ test("折りたたみ状態は有効なセクションだけ重複なく復元�
     "today",
   ]);
   assert.deepEqual(normalizeCollapsedSections(undefined), []);
+});
+
+test("「もうすぐ」の日数は0〜365の整数だけを受け付ける", () => {
+  assert.equal(parseSoonDays("3"), 3);
+  assert.equal(parseSoonDays(" 14 "), 14);
+  assert.equal(parseSoonDays(0), 0);
+  assert.equal(parseSoonDays(365), 365);
+  assert.equal(parseSoonDays("366"), null);
+  assert.equal(parseSoonDays("-1"), null);
+  assert.equal(parseSoonDays("2.5"), null);
+  assert.equal(parseSoonDays(""), null);
+  assert.equal(parseSoonDays(undefined), null);
 });
 
 test("Obsidianの日本語設定だけを日本語として扱い、それ以外は英語へフォールバックする", () => {

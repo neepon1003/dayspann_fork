@@ -2,6 +2,17 @@ export type DayspannSectionKind = "future" | "today" | "past";
 
 export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["today", "future", "past"];
 
+export const DEFAULT_SOON_DAYS = 7;
+export const MAX_SOON_DAYS = 365;
+
+/** 「もうすぐ」の日数を読み取る。0〜365 の整数だけを受け付け、それ以外は null。 */
+export function parseSoonDays(value: unknown): number | null {
+  const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  if (!/^\d+$/.test(text)) return null;
+  const days = Number(text);
+  return days <= MAX_SOON_DAYS ? days : null;
+}
+
 const SECTION_KINDS = new Set<DayspannSectionKind>(DEFAULT_SECTION_ORDER);
 
 export function normalizeCollapsedSections(value: unknown): DayspannSectionKind[] {
