@@ -50,6 +50,7 @@ export interface DayspannSettings {
   pastColor: string;
   sectionOrder: DayspannSectionKind[];
   collapsedSections: DayspannSectionKind[];
+  undatedCollapsed: boolean;
   archiveCollapsed: boolean;
 }
 
@@ -59,6 +60,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   pastColor: "#ef4444",
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   collapsedSections: [],
+  undatedCollapsed: false,
   archiveCollapsed: true,
 };
 
@@ -340,6 +342,11 @@ export default class DayspannPlugin extends Plugin {
     await this.saveSettings();
   }
 
+  async setUndatedCollapsed(collapsed: boolean): Promise<void> {
+    this.settings.undatedCollapsed = collapsed;
+    await this.saveSettings();
+  }
+
   async setArchiveCollapsed(collapsed: boolean): Promise<void> {
     this.settings.archiveCollapsed = collapsed;
     await this.saveSettings();
@@ -363,6 +370,7 @@ export default class DayspannPlugin extends Plugin {
       storageFolder,
       sectionOrder: normalizeSectionOrder(saved?.sectionOrder),
       collapsedSections: normalizeCollapsedSections(saved?.collapsedSections),
+      undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
       archiveCollapsed: saved?.archiveCollapsed ?? DEFAULT_SETTINGS.archiveCollapsed,
     };
   }
@@ -464,7 +472,8 @@ export default class DayspannPlugin extends Plugin {
   private async createRecord(draft: DayspannDraft): Promise<TFile> {
     const folder = this.normalizedStorageFolder();
     await this.ensureFolder(folder);
-    const base = `${draft.date} - ${sanitizeFileName(draft.title, this.t("default.entry"))}`;
+    const name = sanitizeFileName(draft.title, this.t("default.entry"));
+    const base = draft.date ? `${draft.date} - ${name}` : name;
     let path = `${folder}/${base}.md`;
     let index = 2;
     while (this.app.vault.getAbstractFileByPath(path)) {

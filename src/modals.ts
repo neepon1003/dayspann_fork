@@ -140,14 +140,15 @@ export class DayspannEntryModal extends Modal {
       this.showError(this.t("error.nameRequired"));
       return;
     }
-    if (!parseDateKey(this.draft.date)) {
+    const date = this.draft.date.trim();
+    if (date && !parseDateKey(date)) {
       this.showError(this.t("error.dateInvalid"));
       return;
     }
 
     button.disabled = true;
     try {
-      await this.onSubmit({ ...this.draft, title });
+      await this.onSubmit({ ...this.draft, title, date });
       this.close();
     } catch (error) {
       button.disabled = false;

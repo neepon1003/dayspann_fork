@@ -69,13 +69,14 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     return null;
   }
   const title = typeof data.title === "string" ? data.title.trim() : "";
-  const date =
+  const rawDate =
     data.date instanceof Date
       ? data.date.toISOString().slice(0, 10)
       : typeof data.date === "string"
-        ? data.date
+        ? data.date.trim()
         : "";
-  if (!title || !parseDateKey(date)) return null;
+  const date = parseDateKey(rawDate) ? rawDate : "";
+  if (!title || (rawDate && !date)) return null;
 
   const sourceLine = Number(data.sourceLine);
   return {

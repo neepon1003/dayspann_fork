@@ -13,10 +13,10 @@ export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 
 interface CountedRecord {
   record: DayspannRecord;
-  difference: number;
+  difference: number | null;
 }
 
-type ViewSectionKind = DayspannSectionKind | "archive";
+type ViewSectionKind = DayspannSectionKind | "undated" | "archive";
 
 export class DayspannView extends ItemView {
   private refreshVersion = 0;
@@ -82,7 +82,7 @@ export class DayspannView extends ItemView {
     const today = this.plugin.todayKey();
     const counted = records.map((record) => ({
       record,
-      difference: differenceInCalendarDays(record.date, today),
+      difference: record.date ? differenceInCalendarDays(record.date, today) : null,
     }));
 
     if (!counted.length) {
@@ -100,7 +100,13 @@ export class DayspannView extends ItemView {
       return;
     }
 
-    const active = counted.filter((item) => !item.record.archived);
+    const active = counted.filter(
+      (item): item is CountedRecord & { difference: number } =>
+        !item.record.archived && item.difference !== null
+    );
+    const undated = counted
+      .filter((item) => !item.record.archived && item.difference === null)
+      .sort((a, b) => a.record.title.localeCompare(b.record.title));
     const archived = counted
       .filter((item) => item.record.archived)
       .sort((a, b) => b.record.date.localeCompare(a.record.date));
@@ -117,14 +123,22 @@ export class DayspannView extends ItemView {
       { icon: string; title: string; items: CountedRecord[] }
     > = {
       future: { icon: "calendar-clock", title: this.plugin.t("section.future"), items: future },
-      today: { icon: "sun", title: this.plugin.t("section.today"), items: todayRecords },
-      past: { icon: "history", title: this.plugin.t("section.past"), items: past },
+      today: { icon: "circle-check", title: this.plugin.t("section.today"), items: todayRecords },
+      past: { icon: "triangle-alert", title: this.plugin.t("section.past"), items: past },
     };
 
     for (const kind of this.plugin.settings.sectionOrder) {
       const section = sections[kind];
       this.renderSection(root, section.icon, section.title, kind, section.items);
     }
+
+    this.renderSection(
+      root,
+      "calendar-off",
+      this.plugin.t("section.undated"),
+      "undated",
+      undated
+    );
 
     this.renderSection(
       root,
@@ -149,7 +163,9 @@ export class DayspannView extends ItemView {
     const collapsed =
       kind === "archive"
         ? this.plugin.settings.archiveCollapsed
-        : this.plugin.settings.collapsedSections.includes(kind);
+        : kind === "undated"
+          ? this.plugin.settings.undatedCollapsed
+          : this.plugin.settings.collapsedSections.includes(kind);
     section.toggleClass("dayspann-section--collapsed", collapsed);
 
     const listId = `dayspann-list-${this.viewId}-${kind}`;
@@ -190,6 +206,8 @@ export class DayspannView extends ItemView {
       );
       if (kind === "archive") {
         void this.plugin.setArchiveCollapsed(nextCollapsed);
+      } else if (kind === "undated") {
+        void this.plugin.setUndatedCollapsed(nextCollapsed);
       } else {
         void this.plugin.setSectionCollapsed(kind, nextCollapsed);
       }
@@ -234,16 +252,20 @@ export class DayspannView extends ItemView {
 
     const content = card.createDiv("dayspann-card-content");
     content.createEl("h3", { text: record.title });
-    content.createDiv({
-      text: formatLocalizedDate(record.date, this.plugin.locale()),
-      cls: "dayspann-card-date",
-    });
+    if (record.date) {
+      content.createDiv({
+        text: formatLocalizedDate(record.date, this.plugin.locale()),
+        cls: "dayspann-card-date",
+      });
+    }
     if (record.excerpt) {
       content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
     }
 
     const count = card.createDiv("dayspann-count");
-    if (difference === 0) {
+    if (difference === null) {
+      count.createSpan({ text: this.plugin.t("view.noDate"), cls: "dayspann-count-today" });
+    } else if (difference === 0) {
       count.createSpan({ text: this.plugin.t("view.dueToday"), cls: "dayspann-count-today" });
     } else {
       const parts = formatDateSpan(record.date, this.plugin.todayKey(), record.displayMode);

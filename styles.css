@@ -18,6 +18,7 @@
   --dayspann-accent: var(--interactive-accent);
 }
 
+.dayspann-section--undated,
 .dayspann-section--archive {
   --dayspann-accent: var(--text-muted);
 }
@@ -475,15 +476,12 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card .dayspann-card-content h3 {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  display: block;
   overflow: hidden;
   margin: 0 0 2px;
   font-size: 0.84rem;
   line-height: 1.25;
-  white-space: normal;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
