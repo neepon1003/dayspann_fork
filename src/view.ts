@@ -140,7 +140,7 @@ export class DayspannView extends ItemView {
     const todayRecords = active.filter((item) => item.difference === 0);
     const past = active
       .filter((item) => item.difference < 0)
-      .sort((a, b) => Math.abs(a.difference) - Math.abs(b.difference));
+      .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
 
     const sections: Record<
       DayspannSectionKind,
