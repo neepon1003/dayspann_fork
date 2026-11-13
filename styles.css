@@ -57,11 +57,18 @@
 }
 
 .dayspann-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 1.25em;
   margin: 10px 0 0;
   padding-right: 92px;
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   font-weight: 600;
+}
+
+.dayspann-summary-overdue--alert {
+  color: var(--dayspann-past-color);
 }
 
 .dayspann-header-actions {

@@ -96,10 +96,18 @@ export class DayspannView extends ItemView {
         item.difference >= 0 &&
         item.difference <= weekRemaining
     ).length;
-    heading.createDiv({
-      cls: "dayspann-summary",
+    const overdueCount = counted.filter(
+      (item) => !item.record.archived && item.difference !== null && item.difference < 0
+    ).length;
+    const summary = heading.createDiv("dayspann-summary");
+    summary.createSpan({
       text: this.plugin.t("view.dueThisWeek", { count: dueThisWeek }),
     });
+    const overdue = summary.createSpan({
+      cls: "dayspann-summary-overdue",
+      text: this.plugin.t("view.overdueCount", { count: overdueCount }),
+    });
+    if (overdueCount > 0) overdue.addClass("dayspann-summary-overdue--alert");
 
     if (!counted.length) {
       const empty = root.createDiv("dayspann-empty");
