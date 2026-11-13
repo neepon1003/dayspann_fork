@@ -52,6 +52,14 @@
   white-space: nowrap;
 }
 
+.dayspann-summary {
+  margin: 10px 0 0;
+  padding-right: 92px;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+}
+
 .dayspann-header-actions {
   position: absolute;
   top: 0;

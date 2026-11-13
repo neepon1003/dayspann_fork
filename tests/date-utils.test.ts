@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  daysUntilEndOfWeek,
   differenceInCalendarDays,
   formatDateSpan,
   formatLocalizedDate,
@@ -36,6 +37,12 @@ test("存在しない日付は受け付けない", () => {
 
 test("ローカル日付をYYYY-MM-DDにする", () => {
   assert.equal(toDateKey(new Date(2026, 8, 5, 23, 30)), "2026-09-05");
+});
+
+test("今週の終わり（土曜）までの残り日数を返す", () => {
+  assert.equal(daysUntilEndOfWeek("2026-11-08"), 6);
+  assert.equal(daysUntilEndOfWeek("2026-11-11"), 3);
+  assert.equal(daysUntilEndOfWeek("2026-11-14"), 0);
 });
 
 test("表示形式がない既存データは日数表示になる", () => {

@@ -1,6 +1,7 @@
 import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
 import type DayspannPlugin from "../main";
 import {
+  daysUntilEndOfWeek,
   differenceInCalendarDays,
   formatDateSpan,
   formatLocalizedDate,
@@ -86,6 +87,19 @@ export class DayspannView extends ItemView {
       record,
       difference: record.date ? differenceInCalendarDays(record.date, today) : null,
     }));
+
+    const weekRemaining = daysUntilEndOfWeek(today);
+    const dueThisWeek = counted.filter(
+      (item) =>
+        !item.record.archived &&
+        item.difference !== null &&
+        item.difference >= 0 &&
+        item.difference <= weekRemaining
+    ).length;
+    heading.createDiv({
+      cls: "dayspann-summary",
+      text: this.plugin.t("view.dueThisWeek", { count: dueThisWeek }),
+    });
 
     if (!counted.length) {
       const empty = root.createDiv("dayspann-empty");

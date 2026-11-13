@@ -68,6 +68,17 @@ export function differenceInCalendarDays(
   return Math.round((targetTime - todayTime) / DAY_MS);
 }
 
+/** 週の始まり。0 が日曜、1 が月曜です（JavaScript の getUTCDay と同じ番号です）。 */
+export const WEEK_STARTS_ON = 0;
+
+export function daysUntilEndOfWeek(todayDateKey: string): number {
+  const today = parseDateKey(todayDateKey);
+  if (!today) throw new Error("日付は YYYY-MM-DD 形式で入力してください");
+
+  const weekday = new Date(Date.UTC(today.year, today.month - 1, today.day)).getUTCDay();
+  return (WEEK_STARTS_ON - weekday + 6) % 7;
+}
+
 export function normalizeDisplayMode(value: unknown): DayspannDisplayMode {
   return typeof value === "string" && DISPLAY_MODES.has(value as DayspannDisplayMode)
     ? (value as DayspannDisplayMode)
