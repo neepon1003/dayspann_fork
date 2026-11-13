@@ -28,6 +28,10 @@
   --dayspann-accent: var(--dayspann-soon-color);
 }
 
+.dayspann-card--done {
+  --dayspann-accent: var(--text-muted);
+}
+
 .dayspann-header {
   position: relative;
   display: flex;
@@ -255,7 +259,8 @@
   line-height: 1;
 }
 
-.dayspann-count-today {
+.dayspann-count-today,
+.dayspann-count-done {
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
@@ -451,7 +456,8 @@
   font-size: 1.45rem;
 }
 
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-today {
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-today,
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-count-done {
   font-size: 1.05rem;
 }
 
@@ -530,7 +536,8 @@
   font-size: 1.25rem;
 }
 
-.dayspann-view.dayspann-is-extra-narrow .dayspann-count-today {
+.dayspann-view.dayspann-is-extra-narrow .dayspann-count-today,
+.dayspann-view.dayspann-is-extra-narrow .dayspann-count-done {
   font-size: 1rem;
 }
 

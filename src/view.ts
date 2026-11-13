@@ -236,6 +236,9 @@ export class DayspannView extends ItemView {
     if (difference !== null && difference >= 1 && difference <= SOON_DAYS) {
 	card.addClass("dayspann-card--soon");
     }	
+    if (record.archived) {
+      card.addClass("dayspann-card--done");
+    }
     card.tabIndex = 0;
     card.setAttribute("role", "button");
     card.addEventListener("click", (event) => {
@@ -282,7 +285,9 @@ export class DayspannView extends ItemView {
     }
 
     const count = card.createDiv("dayspann-count");
-    if (difference === null) {
+    if (record.archived) {
+      count.createSpan({ text: this.plugin.t("view.done"), cls: "dayspann-count-done" });
+    } else if (difference === null) {
       count.createSpan({ text: this.plugin.t("view.noDate"), cls: "dayspann-count-today" });
     } else if (difference === 0) {
       count.createSpan({ text: this.plugin.t("view.dueToday"), cls: "dayspann-count-today" });
