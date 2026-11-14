@@ -1,5 +1,6 @@
-import { ItemView, Menu, setIcon, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, setIcon, setTooltip, WorkspaceLeaf } from "obsidian";
 import type DayspannPlugin from "../main";
+import { planCardActions } from "./card-actions";
 import {
   compareArchiveOrder,
   daysUntilEndOfWeek,
@@ -8,7 +9,7 @@ import {
   formatDateSpan,
   formatLocalizedDate,
 } from "./date-utils";
-import { durationUnit, TranslationKey } from "./i18n";
+import { durationUnit } from "./i18n";
 import { DayspannRecord } from "./model";
 import { DayspannSectionKind } from "./settings";
 
@@ -295,14 +296,13 @@ export class DayspannView extends ItemView {
         cls: "dayspann-card-date",
       });
     }
-    if (!record.archived && record.taskchute?.targetDate === this.plugin.todayKey()) {
-      content.createSpan({ text: this.plugin.t("action.today"), cls: "dayspann-today-badge" });
-    }
     if (record.excerpt) {
       content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
     }
 
-    const count = card.createDiv("dayspann-count");
+    // 日数とボタンを同じ行に並べて、カードの高さを抑える。
+    const countRow = card.createDiv("dayspann-count-row");
+    const count = countRow.createDiv("dayspann-count");
     if (record.archived) {
       const completedDate = record.completed
         ? formatCompletedBadgeDate(record.completed, this.plugin.todayKey())
@@ -336,22 +336,10 @@ export class DayspannView extends ItemView {
        }		
     }
 
-    const actions = card.createDiv("dayspann-card-actions");
-    if (!record.archived && !record.completed && record.taskchute) {
-      const todayButton = actions.createEl("button", {
-        cls: "dayspann-today-button",
-        text: this.plugin.t("action.today"),
-        attr: { type: "button", "aria-label": this.plugin.t("action.todayLabel") },
-      });
-      todayButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        void this.plugin.addRecordToTaskChuteToday(record);
-      });
-    }
-    if (!record.archived && record.date) {
-      this.postponeButton(actions, "action.postponeWeek", "action.postponeWeekLabel", record, 7);
-    }
-    if (!record.archived) {
+    const plan = planCardActions(record, this.plugin.todayKey());
+    const actions = countRow.createDiv("dayspann-card-actions");
+    if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
+    if (plan.complete) {
       this.iconButton(actions, "check", this.plugin.t("action.complete"), () => {
         void this.plugin.setRecordArchived(record, true);
       });
@@ -360,6 +348,12 @@ export class DayspannView extends ItemView {
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = new Menu();
+      if (plan.postponeInMenu) {
+        menu.addItem((menuItem) =>
+          menuItem.setTitle(this.plugin.t("action.postponeWeek")).setIcon("calendar-plus").onClick(() => void this.plugin.postponeRecord(record, 7))
+        );
+        menu.addSeparator();
+      }
       menu.addItem((menuItem) =>
         menuItem.setTitle(this.plugin.t("action.edit")).setIcon("pencil").onClick(() => this.plugin.openEditEntry(record))
       );
@@ -391,21 +385,19 @@ export class DayspannView extends ItemView {
     );
   }
 
-  private postponeButton(
-    parent: HTMLElement,
-    textKey: TranslationKey,
-    labelKey: TranslationKey,
-    record: DayspannRecord,
-    days: number
-  ): HTMLButtonElement {
+  /** 「今日やる」ボタン。今日の一覧に入っているときは枠だけの「入っています」の形にする。 */
+  private todayButton(parent: HTMLElement, record: DayspannRecord, inToday: boolean): HTMLButtonElement {
+    const label = this.plugin.t(inToday ? "action.inTodayLabel" : "action.todayLabel");
     const button = parent.createEl("button", {
-      cls: "dayspann-postpone-button",
-      text: this.plugin.t(textKey),
-      attr: { type: "button", "aria-label": this.plugin.t(labelKey) },
+      cls: "dayspann-today-button" + (inToday ? " dayspann-today-button--done" : ""),
+      attr: { type: "button", "aria-label": label },
     });
+    setIcon(button.createSpan("dayspann-today-icon"), "sun");
+    if (inToday) setIcon(button.createSpan("dayspann-today-check"), "check");
+    setTooltip(button, label);
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      void this.plugin.postponeRecord(record, days);
+      void this.plugin.addRecordToTaskChuteToday(record);
     });
     return button;
   }

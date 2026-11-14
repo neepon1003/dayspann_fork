@@ -175,7 +175,7 @@
 .dayspann-card {
   position: relative;
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) minmax(90px, auto) auto;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   min-height: 92px;
@@ -212,14 +212,19 @@
   min-width: 0;
 }
 
+/* タイトルはどの幅でも2行まで折り返して出す。 */
 .dayspann-card-content h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   margin: 0 0 4px;
   overflow: hidden;
   color: var(--text-normal);
   font-size: 1rem;
   line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .dayspann-card-date {
@@ -285,44 +290,101 @@
   font-weight: 600;
 }
 
+/* 日数とボタンを同じ行に並べる。入りきらないときはボタンだけ次の行に回る。 */
+.dayspann-count-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
 .dayspann-card-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .dayspann-card-actions .dayspann-icon-button {
-  min-width: 32px;
-  min-height: 40px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
   padding: 0;
-}
-
-.dayspann-postpone-button {
-  min-height: 28px;
-  padding: 0 6px;
-  margin-right: 2px;
-  font-size: var(--font-ui-smaller);
+  border-radius: 50%;
   color: var(--text-muted);
-  white-space: nowrap;
 }
 
+.dayspann-card-actions .dayspann-icon-button:hover {
+  color: var(--text-normal);
+}
+
+/* 「今日やる」は緑の丸ボタンで目立たせる。 */
 .dayspann-today-button {
-  min-height: 28px;
-  padding: 0 6px;
-  margin-right: 2px;
-  font-size: var(--font-ui-smaller);
-  color: var(--text-accent);
-  white-space: nowrap;
+  --dayspann-today-color: var(--color-green, var(--dayspann-future-color));
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dayspann-today-color) 78%, #000);
+  box-shadow: none;
+  color: #fff;
+  cursor: pointer;
 }
 
-.dayspann-today-badge {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 0 6px;
-  border-radius: var(--radius-s);
-  background: var(--background-modifier-hover);
-  color: var(--text-accent);
-  font-size: var(--font-ui-smaller);
+.dayspann-today-button:hover {
+  background: color-mix(in srgb, var(--dayspann-today-color) 90%, #000);
+}
+
+.dayspann-today-button:focus-visible {
+  outline: 2px solid var(--dayspann-today-color);
+  outline-offset: 2px;
+}
+
+.dayspann-today-icon,
+.dayspann-today-check {
+  display: inline-flex;
+}
+
+.dayspann-today-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 今日の一覧に入っているときは、枠だけにして右下に小さな✓を付ける。 */
+.dayspann-today-button--done,
+.dayspann-today-button--done:hover {
+  border-color: var(--dayspann-today-color);
+  background: color-mix(in srgb, var(--dayspann-today-color) 12%, transparent);
+  color: var(--dayspann-today-color);
+}
+
+.dayspann-today-check {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dayspann-today-color) 78%, #000);
+  color: #fff;
+}
+
+.dayspann-today-check svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 3;
 }
 
 .dayspann-empty {
@@ -402,7 +464,7 @@
   }
 
   .dayspann-card {
-    grid-template-columns: 48px minmax(0, 1fr) auto auto;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
     gap: 10px;
     min-height: 80px;
     padding: 10px 6px 10px 10px;
@@ -470,49 +532,34 @@
 }
 
 .dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card {
-  grid-template-columns: 52px minmax(0, 1fr) minmax(74px, auto) auto;
-  gap: 10px;
+  gap: 6px 10px;
   min-height: 82px;
   padding: 10px 6px 10px 10px;
   border-radius: 12px;
 }
 
-/* 幅が狭いとボタンの列がタイトルの幅を奪うので、まだ終わっていないカードはボタンを下の行に出す。 */
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) {
+/* 狭い表示では、タイトルを横幅いっぱいに使い、日数とボタンをその下の1行に並べる。 */
+.dayspann-view.dayspann-is-narrow .dayspann-card {
   grid-template-areas:
-    "accent content count"
-    "accent actions actions";
-  grid-template-columns: 52px minmax(0, 1fr) minmax(74px, auto);
+    "accent content"
+    "accent countrow";
+  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-rows: auto auto;
   row-gap: 6px;
 }
 
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-accent {
+.dayspann-view.dayspann-is-narrow .dayspann-card-accent {
   grid-area: accent;
+  align-self: start;
 }
 
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-content {
+.dayspann-view.dayspann-is-narrow .dayspann-card-content {
   grid-area: content;
 }
 
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-count {
-  grid-area: count;
-}
-
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-actions {
-  grid-area: actions;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-/* 狭い表示ではタイトルを最大2行まで折り返して出す。 */
-.dayspann-view.dayspann-is-narrow .dayspann-card .dayspann-card-content h3 {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  white-space: normal;
-  overflow-wrap: anywhere;
+.dayspann-view.dayspann-is-narrow .dayspann-count-row {
+  grid-area: countrow;
+  justify-content: space-between;
 }
 
 .dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card-accent {
@@ -562,35 +609,16 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card {
-  grid-template-areas:
-    "accent content"
-    "accent count"
-    "actions actions";
   grid-template-columns: 44px minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
   gap: 5px 8px;
   min-height: 72px;
   padding: 9px 5px 9px 8px;
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card-accent {
-  grid-area: accent;
   width: 40px;
   height: 46px;
   font-size: 1rem;
-}
-
-.dayspann-view.dayspann-is-extra-narrow .dayspann-card-content {
-  grid-area: content;
-}
-
-/* 完了済みのカードはボタンが「…」だけなので、タイトルの右に置く。 */
-.dayspann-view.dayspann-is-extra-narrow .dayspann-card.dayspann-card--done {
-  grid-template-areas:
-    "accent content actions"
-    "accent count count";
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card .dayspann-card-content h3 {
@@ -612,8 +640,6 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-count {
-  grid-area: count;
-  justify-self: start;
   min-width: 0;
   max-width: 100%;
   padding: 5px 6px;
@@ -639,11 +665,5 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card-actions {
-  grid-area: actions;
-  flex-wrap: wrap;
   gap: 2px;
-}
-
-.dayspann-view.dayspann-is-extra-narrow .dayspann-card--done .dayspann-card-actions {
-  align-self: start;
 }

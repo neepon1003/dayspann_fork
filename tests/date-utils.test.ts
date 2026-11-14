@@ -25,6 +25,7 @@ import {
   parseSourceReference,
 } from "../src/source-link";
 import { applyDraftToFrontmatter, replaceRecordBody } from "../src/record-edit";
+import { planCardActions } from "../src/card-actions";
 import {
   canReloadTaskChuteView,
   hasTaskTag,
@@ -326,8 +327,43 @@ test("実際のTaskChuteタスクノート（type: dayspann・tags: [task]・tas
   assert.equal(readTargetDate(frontmatter.target_date), "2026-12-22");
 });
 
-test("先送りボタンは+1週だけを出す", () => {
-  assert.equal(createTranslator("ja")("action.postponeWeek"), "+1週");
-  assert.equal(createTranslator("en")("action.postponeWeek"), "+1 week");
+test("「期日を1週間延ばす」は「…」メニューの項目にする", () => {
+  assert.equal(createTranslator("ja")("action.postponeWeek"), "期日を1週間延ばす");
+  assert.equal(createTranslator("en")("action.postponeWeek"), "Postpone 1 week");
   assert.equal(shiftDateKey("2026-11-30", 7), "2026-12-07");
+});
+
+test("TaskChuteのカードは「今日やる」を出し、今日の一覧に入っていれば「入っています」の形にする", () => {
+  const record = { archived: false, date: "2026-12-22", taskchute: { targetDate: "2026-12-22" } };
+  assert.deepEqual(planCardActions(record, "2026-11-14"), {
+    today: "add",
+    complete: true,
+    postponeInMenu: true,
+  });
+  assert.equal(planCardActions({ ...record, taskchute: {} }, "2026-11-14").today, "add");
+  assert.equal(
+    planCardActions({ ...record, taskchute: { targetDate: "2026-11-14" } }, "2026-11-14").today,
+    "inToday"
+  );
+  assert.equal(createTranslator("ja")("action.inTodayLabel"), "今日の一覧に入っています");
+  assert.equal(createTranslator("ja")("action.todayLabel"), "TaskChuteの今日の一覧に入れる");
+});
+
+test("TaskChuteでないカードは✓と「…」だけ、期日がなければ先送りはメニューに出さない", () => {
+  assert.deepEqual(planCardActions({ archived: false, date: "2026-12-22" }, "2026-11-14"), {
+    today: "none",
+    complete: true,
+    postponeInMenu: true,
+  });
+  assert.equal(planCardActions({ archived: false, date: "" }, "2026-11-14").postponeInMenu, false);
+});
+
+test("アーカイブ済みのカードは「…」だけにする", () => {
+  assert.deepEqual(
+    planCardActions(
+      { archived: true, completed: "2026-11-13", date: "2026-11-30", taskchute: { targetDate: "2026-11-14" } },
+      "2026-11-14"
+    ),
+    { today: "none", complete: false, postponeInMenu: false }
+  );
 });
