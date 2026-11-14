@@ -306,6 +306,25 @@
   white-space: nowrap;
 }
 
+.dayspann-today-button {
+  min-height: 28px;
+  padding: 0 6px;
+  margin-right: 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+  white-space: nowrap;
+}
+
+.dayspann-today-badge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+  font-size: var(--font-ui-smaller);
+}
+
 .dayspann-empty {
   max-width: 520px;
   margin: 70px auto;

@@ -29,6 +29,13 @@ import {
   TranslationVariables,
 } from "./src/i18n";
 import { DayspannEntryModal } from "./src/modals";
+import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
+import {
+  canReloadTaskChuteView,
+  readTargetDate,
+  TASKCHUTE_SHOW_TODAY_COMMAND,
+  TaskChuteHost,
+} from "./src/taskchute";
 import {
   DayspannDraft,
   DayspannRecord,
@@ -254,7 +261,12 @@ export default class DayspannPlugin extends Plugin {
       this.t("action.save"),
       (key, variables) => this.t(key, variables),
       async (draft) => {
-        await this.app.vault.modify(record.file, serializeRecord(draft));
+        // ファイル全体を書き直さず、PJ-spanのキーと本文だけを変える（TaskChuteの taskId・tags・target_date などを残すため）。
+        await this.app.vault.process(record.file, (content) => replaceRecordBody(content, draft.excerpt));
+        await this.app.fileManager.processFrontMatter(
+          record.file,
+          (frontmatter: Record<string, unknown>) => applyDraftToFrontmatter(frontmatter, draft)
+        );
         new Notice(this.t("notice.updated"));
         await this.refreshViews();
       }
@@ -300,6 +312,54 @@ export default class DayspannPlugin extends Plugin {
     if (!nextDate) return;
     new Notice(this.t("notice.postponed", { date: formatLocalizedDate(nextDate, this.locale()) }));
     await this.refreshViews();
+  }
+
+  async addRecordToTaskChuteToday(record: DayspannRecord): Promise<void> {
+    const today = this.todayKey();
+    let changed = false;
+    await this.app.fileManager.processFrontMatter(
+      record.file,
+      (frontmatter: Record<string, unknown>) => {
+        if (readTargetDate(frontmatter.target_date) === today) return;
+        frontmatter.target_date = today;
+        changed = true;
+      }
+    );
+    if (!changed) {
+      new Notice(this.t("notice.alreadyToday", { title: record.title }));
+      await this.refreshViews();
+      return;
+    }
+
+    new Notice(this.t("notice.addedToday", { title: record.title }));
+    await this.refreshViews();
+    await this.reloadTaskChuteView(record.file, today);
+  }
+
+  /** TaskChuteの画面が開いているときだけ「今日のタスクを表示」で読み直す。開いていなければ何もしない（勝手に画面を開かない）。 */
+  private async reloadTaskChuteView(file: TFile, targetDate: string): Promise<void> {
+    const host = this.app as unknown as TaskChuteHost;
+    if (!canReloadTaskChuteView(host)) return;
+    // TaskChuteはメタデータキャッシュから target_date を読むので、キャッシュが新しい日付になるまで少し待つ。
+    await this.waitForTargetDate(file, targetDate, 1500);
+    host.commands?.executeCommandById?.(TASKCHUTE_SHOW_TODAY_COMMAND);
+  }
+
+  private waitForTargetDate(file: TFile, targetDate: string, timeoutMs: number): Promise<void> {
+    const cached = () =>
+      readTargetDate(this.app.metadataCache.getFileCache(file)?.frontmatter?.target_date) === targetDate;
+    if (cached()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const ref = this.app.metadataCache.on("changed", (changedFile) => {
+        if (changedFile.path === file.path && cached()) finish();
+      });
+      const timer = window.setTimeout(() => finish(), timeoutMs);
+      const finish = () => {
+        window.clearTimeout(timer);
+        this.app.metadataCache.offref(ref);
+        resolve();
+      };
+    });
   }
 
   async openRecordSource(record: DayspannRecord): Promise<void> {

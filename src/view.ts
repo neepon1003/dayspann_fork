@@ -295,6 +295,9 @@ export class DayspannView extends ItemView {
         cls: "dayspann-card-date",
       });
     }
+    if (!record.archived && record.taskchute?.targetDate === this.plugin.todayKey()) {
+      content.createSpan({ text: this.plugin.t("action.today"), cls: "dayspann-today-badge" });
+    }
     if (record.excerpt) {
       content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
     }
@@ -334,6 +337,17 @@ export class DayspannView extends ItemView {
     }
 
     const actions = card.createDiv("dayspann-card-actions");
+    if (!record.archived && !record.completed && record.taskchute) {
+      const todayButton = actions.createEl("button", {
+        cls: "dayspann-today-button",
+        text: this.plugin.t("action.today"),
+        attr: { type: "button", "aria-label": this.plugin.t("action.todayLabel") },
+      });
+      todayButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void this.plugin.addRecordToTaskChuteToday(record);
+      });
+    }
     if (!record.archived && record.date) {
       this.postponeButton(actions, "action.postponeDay", "action.postponeDayLabel", record, 1);
       this.postponeButton(actions, "action.postponeWeek", "action.postponeWeekLabel", record, 7);

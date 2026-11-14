@@ -7,6 +7,7 @@ import {
   readDateKey,
 } from "./date-utils";
 import { formatSourceReference, parseSourceReference } from "./source-link";
+import { isTaskChuteTask, readTargetDate } from "./taskchute";
 
 export interface DayspannRecord {
   file: TFile;
@@ -19,6 +20,8 @@ export interface DayspannRecord {
   sourcePath?: string;
   sourceLine?: number;
   created: string;
+  /** TaskChute のタスクノート（tags に task、または taskId がある）なら入る。 */
+  taskchute?: { targetDate?: string };
 }
 
 export interface DayspannDraft {
@@ -94,6 +97,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     sourcePath: parseSourceReference(data.source),
     sourceLine: Number.isInteger(sourceLine) && sourceLine > 0 ? sourceLine : undefined,
     created: typeof data.created === "string" ? data.created : "",
+    taskchute: isTaskChuteTask(data) ? { targetDate: readTargetDate(data.target_date) } : undefined,
   };
 }
 

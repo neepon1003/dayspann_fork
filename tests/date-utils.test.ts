@@ -24,6 +24,15 @@ import {
   isLinkedSourceReference,
   parseSourceReference,
 } from "../src/source-link";
+import { applyDraftToFrontmatter, replaceRecordBody } from "../src/record-edit";
+import {
+  canReloadTaskChuteView,
+  hasTaskTag,
+  isTaskChuteTask,
+  readTargetDate,
+  TASKCHUTE_SHOW_TODAY_COMMAND,
+  TaskChuteHost,
+} from "../src/taskchute";
 
 test("基準日と今日が同じなら0日", () => {
   assert.equal(differenceInCalendarDays("2026-09-11", "2026-09-11"), 0);
@@ -219,4 +228,86 @@ test("登録元をクリックできる内部リンクとして保存し、従�
   assert.equal(parseSourceReference("[[Journal/2026-09-14.md|元メモ]]"), path);
   assert.equal(isLinkedSourceReference(link), true);
   assert.equal(isLinkedSourceReference(path), false);
+});
+
+test("tagsのtaskを配列・文字列・#つきのどれでも見つける", () => {
+  assert.equal(hasTaskTag(["task"]), true);
+  assert.equal(hasTaskTag(["work", "#task"]), true);
+  assert.equal(hasTaskTag("task"), true);
+  assert.equal(hasTaskTag("#task"), true);
+  assert.equal(hasTaskTag("work, task"), true);
+  assert.equal(hasTaskTag(["tasks", "taskchute"]), false);
+  assert.equal(hasTaskTag(undefined), false);
+  assert.equal(hasTaskTag(3), false);
+});
+
+test("TaskChuteのタスクノートを tags か taskId で見分け、target_date を読む", () => {
+  assert.equal(isTaskChuteTask({ tags: ["task"] }), true);
+  assert.equal(isTaskChuteTask({ taskId: "tc-task-1" }), true);
+  assert.equal(isTaskChuteTask({ taskchuteId: "tc-task-1" }), true);
+  assert.equal(isTaskChuteTask({ type: "dayspann", taskId: " " }), false);
+  assert.equal(isTaskChuteTask({ type: "project" }), false);
+  assert.equal(readTargetDate("2026-12-22"), "2026-12-22");
+  assert.equal(readTargetDate(new Date("2026-12-22T00:00:00Z")), "2026-12-22");
+  assert.equal(readTargetDate("12/22"), undefined);
+  assert.equal(readTargetDate(undefined), undefined);
+});
+
+test("TaskChuteの画面は、有効・コマンドあり・画面が開いているときだけ読み直す", () => {
+  const host = (enabled: boolean, command: boolean, leaves: number): TaskChuteHost => ({
+    plugins: { enabledPlugins: new Set(enabled ? ["taskchute-plus"] : []) },
+    commands: {
+      commands: command ? { [TASKCHUTE_SHOW_TODAY_COMMAND]: {} } : {},
+      executeCommandById: () => true,
+    },
+    workspace: {
+      getLeavesOfType: (type: string) => (type === "taskchute-view" ? new Array<unknown>(leaves).fill({}) : []),
+    },
+  });
+  assert.equal(canReloadTaskChuteView(host(true, true, 1)), true);
+  assert.equal(canReloadTaskChuteView(host(false, true, 1)), false);
+  assert.equal(canReloadTaskChuteView(host(true, false, 1)), false);
+  assert.equal(canReloadTaskChuteView(host(true, true, 0)), false);
+  assert.equal(canReloadTaskChuteView({ workspace: { getLeavesOfType: () => [{}] } }), false);
+});
+
+test("編集で保存してもTaskChuteのキーとtypeを消さない", () => {
+  const frontmatter: Record<string, unknown> = {
+    target_date: "2026-12-22",
+    taskId: "tc-task-1",
+    tags: ["task"],
+    title: "旧タイトル",
+    type: "dayspann",
+    date: "2026-12-22",
+    archived: true,
+    completed: "2026-11-01",
+    source: "[[元ノート]]",
+  };
+  applyDraftToFrontmatter(frontmatter, {
+    title: " 新タイトル ",
+    date: "2026-12-25",
+    displayMode: "days",
+    excerpt: "",
+    sourcePath: "元ノート",
+  });
+  assert.deepEqual(frontmatter, {
+    target_date: "2026-12-22",
+    taskId: "tc-task-1",
+    tags: ["task"],
+    title: "新タイトル",
+    type: "dayspann",
+    date: "2026-12-25",
+    display: "days",
+    source: "[[元ノート]]",
+  });
+});
+
+test("本文だけを入れ替え、frontmatterはそのまま残す", () => {
+  const content = "---\ntaskId: tc-task-1\ntags:\n  - task\n---\n\n# 古い本文\n";
+  assert.equal(
+    replaceRecordBody(content, "  # 新しい本文  "),
+    "---\ntaskId: tc-task-1\ntags:\n  - task\n---\n\n# 新しい本文\n"
+  );
+  assert.equal(replaceRecordBody(content, ""), "---\ntaskId: tc-task-1\ntags:\n  - task\n---\n");
+  assert.equal(replaceRecordBody("本文だけ", "新しい"), "新しい\n");
 });
