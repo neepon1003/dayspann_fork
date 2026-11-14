@@ -1,7 +1,7 @@
 {
   "id": "pj-span",
   "name": "PJ-span",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.13.0",
   "description": "Track project deadlines and see how many days are left until each one.",
   "author": "minamimoto masanobu",

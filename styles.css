@@ -477,6 +477,44 @@
   border-radius: 12px;
 }
 
+/* 幅が狭いとボタンの列がタイトルの幅を奪うので、まだ終わっていないカードはボタンを下の行に出す。 */
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) {
+  grid-template-areas:
+    "accent content count"
+    "accent actions actions";
+  grid-template-columns: 52px minmax(0, 1fr) minmax(74px, auto);
+  row-gap: 6px;
+}
+
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-accent {
+  grid-area: accent;
+}
+
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-content {
+  grid-area: content;
+}
+
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-count {
+  grid-area: count;
+}
+
+.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card:not(.dayspann-card--done) .dayspann-card-actions {
+  grid-area: actions;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+/* 狭い表示ではタイトルを最大2行まで折り返して出す。 */
+.dayspann-view.dayspann-is-narrow .dayspann-card .dayspann-card-content h3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card-accent {
   width: 52px;
   height: 58px;
@@ -525,10 +563,11 @@
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card {
   grid-template-areas:
-    "accent content more"
-    "accent count count";
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
+    "accent content"
+    "accent count"
+    "actions actions";
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
   gap: 5px 8px;
   min-height: 72px;
   padding: 9px 5px 9px 8px;
@@ -545,14 +584,19 @@
   grid-area: content;
 }
 
+/* 完了済みのカードはボタンが「…」だけなので、タイトルの右に置く。 */
+.dayspann-view.dayspann-is-extra-narrow .dayspann-card.dayspann-card--done {
+  grid-template-areas:
+    "accent content actions"
+    "accent count count";
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+}
+
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card .dayspann-card-content h3 {
-  display: block;
-  overflow: hidden;
   margin: 0 0 2px;
   font-size: 0.84rem;
   line-height: 1.25;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card-excerpt {
@@ -595,6 +639,11 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card-actions {
-  grid-area: more;
+  grid-area: actions;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.dayspann-view.dayspann-is-extra-narrow .dayspann-card--done .dayspann-card-actions {
   align-self: start;
 }

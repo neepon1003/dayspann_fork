@@ -311,3 +311,23 @@ test("本文だけを入れ替え、frontmatterはそのまま残す", () => {
   assert.equal(replaceRecordBody(content, ""), "---\ntaskId: tc-task-1\ntags:\n  - task\n---\n");
   assert.equal(replaceRecordBody("本文だけ", "新しい"), "新しい\n");
 });
+
+test("実際のTaskChuteタスクノート（type: dayspann・tags: [task]・taskId）をTaskChuteのタスクとして読む", () => {
+  const frontmatter = {
+    target_date: "2026-12-22",
+    taskId: "tc-task-4aacd653-f7d9-477d-a3d4-7ba1b7bc6379",
+    tags: ["task"],
+    title: "はばタンPAY+第6弾｜当選結果を確認する",
+    notetoolbar: ["btn"],
+    type: "dayspann",
+    date: "2026-12-22",
+  };
+  assert.equal(isTaskChuteTask(frontmatter), true);
+  assert.equal(readTargetDate(frontmatter.target_date), "2026-12-22");
+});
+
+test("先送りボタンは+1週だけを出す", () => {
+  assert.equal(createTranslator("ja")("action.postponeWeek"), "+1週");
+  assert.equal(createTranslator("en")("action.postponeWeek"), "+1 week");
+  assert.equal(shiftDateKey("2026-11-30", 7), "2026-12-07");
+});

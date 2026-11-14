@@ -349,7 +349,6 @@ export class DayspannView extends ItemView {
       });
     }
     if (!record.archived && record.date) {
-      this.postponeButton(actions, "action.postponeDay", "action.postponeDayLabel", record, 1);
       this.postponeButton(actions, "action.postponeWeek", "action.postponeWeekLabel", record, 7);
     }
     if (!record.archived) {
