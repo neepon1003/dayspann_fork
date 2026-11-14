@@ -89,6 +89,18 @@ export function toDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** YYYY-MM-DD の日付を days 日ずらす（マイナスなら前へ）。月末・年末・うるう年もカレンダーどおり。 */
+export function shiftDateKey(dateKey: string, days: number): string {
+  const date = parseDateKey(dateKey);
+  if (!date) throw new Error("日付は YYYY-MM-DD 形式で入力してください");
+
+  const shifted = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  const year = String(shifted.getUTCFullYear()).padStart(4, "0");
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function differenceInCalendarDays(
   targetDateKey: string,
   todayDateKey: string

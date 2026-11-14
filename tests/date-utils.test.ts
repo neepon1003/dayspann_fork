@@ -10,6 +10,7 @@ import {
   normalizeDisplayMode,
   parseDateKey,
   readDateKey,
+  shiftDateKey,
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
@@ -65,6 +66,17 @@ test("アーカイブは完了日が新しい順で、完了日がないもの�
 
 test("ローカル日付をYYYY-MM-DDにする", () => {
   assert.equal(toDateKey(new Date(2026, 8, 5, 23, 30)), "2026-09-05");
+});
+
+test("期日を+1日・+1週ずらすと月末・年末・うるう年もカレンダーどおりになる", () => {
+  assert.equal(shiftDateKey("2026-11-14", 1), "2026-11-15");
+  assert.equal(shiftDateKey("2026-11-14", 7), "2026-11-21");
+  assert.equal(shiftDateKey("2026-11-30", 1), "2026-12-01");
+  assert.equal(shiftDateKey("2026-12-28", 7), "2027-01-04");
+  assert.equal(shiftDateKey("2024-02-28", 1), "2024-02-29");
+  assert.equal(shiftDateKey("2025-02-28", 1), "2025-03-01");
+  assert.equal(shiftDateKey("2026-03-31", -1), "2026-03-30");
+  assert.throws(() => shiftDateKey("2026-02-30", 1));
 });
 
 test("今週の終わり（土曜）までの残り日数を返す", () => {

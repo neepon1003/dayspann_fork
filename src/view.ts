@@ -8,7 +8,7 @@ import {
   formatDateSpan,
   formatLocalizedDate,
 } from "./date-utils";
-import { durationUnit } from "./i18n";
+import { durationUnit, TranslationKey } from "./i18n";
 import { DayspannRecord } from "./model";
 import { DayspannSectionKind } from "./settings";
 
@@ -334,6 +334,10 @@ export class DayspannView extends ItemView {
     }
 
     const actions = card.createDiv("dayspann-card-actions");
+    if (!record.archived && record.date) {
+      this.postponeButton(actions, "action.postponeDay", "action.postponeDayLabel", record, 1);
+      this.postponeButton(actions, "action.postponeWeek", "action.postponeWeekLabel", record, 7);
+    }
     if (!record.archived) {
       this.iconButton(actions, "check", this.plugin.t("action.complete"), () => {
         void this.plugin.setRecordArchived(record, true);
@@ -372,6 +376,25 @@ export class DayspannView extends ItemView {
         .setIcon(archived ? "archive-restore" : "archive")
         .onClick(() => void this.plugin.setRecordArchived(record, !archived))
     );
+  }
+
+  private postponeButton(
+    parent: HTMLElement,
+    textKey: TranslationKey,
+    labelKey: TranslationKey,
+    record: DayspannRecord,
+    days: number
+  ): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: "dayspann-postpone-button",
+      text: this.plugin.t(textKey),
+      attr: { type: "button", "aria-label": this.plugin.t(labelKey) },
+    });
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void this.plugin.postponeRecord(record, days);
+    });
+    return button;
   }
 
   private iconButton(

@@ -14,7 +14,13 @@ import {
   TFile,
   TFolder,
 } from "obsidian";
-import { toDateKey, parseDateKey } from "./src/date-utils";
+import {
+  formatLocalizedDate,
+  parseDateKey,
+  readDateKey,
+  shiftDateKey,
+  toDateKey,
+} from "./src/date-utils";
 import {
   createTranslator,
   DayspannLocale,
@@ -277,6 +283,22 @@ export default class DayspannPlugin extends Plugin {
       }
     );
     new Notice(this.t(archived ? "notice.archived" : "notice.restored"));
+    await this.refreshViews();
+  }
+
+  async postponeRecord(record: DayspannRecord, days: number): Promise<void> {
+    let nextDate = "";
+    await this.app.fileManager.processFrontMatter(
+      record.file,
+      (frontmatter: Record<string, unknown>) => {
+        const currentDate = readDateKey(frontmatter.date);
+        if (!currentDate) return;
+        nextDate = shiftDateKey(currentDate, days);
+        frontmatter.date = nextDate;
+      }
+    );
+    if (!nextDate) return;
+    new Notice(this.t("notice.postponed", { date: formatLocalizedDate(nextDate, this.locale()) }));
     await this.refreshViews();
   }
 

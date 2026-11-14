@@ -297,6 +297,15 @@
   padding: 0;
 }
 
+.dayspann-postpone-button {
+  min-height: 28px;
+  padding: 0 6px;
+  margin-right: 2px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .dayspann-empty {
   max-width: 520px;
   margin: 70px auto;
