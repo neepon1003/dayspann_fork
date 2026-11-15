@@ -26,6 +26,7 @@ import {
 } from "../src/source-link";
 import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
+import { findDuplicates, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import {
   buildNewNoteBody,
   buildNewNoteTitle,
@@ -537,4 +538,28 @@ test("編集の保存では、タイトルの後ろの言葉・notetoolbar・本
   const body = buildNewNoteBody("選んだ文章");
   const note = `---\ntitle: テスト\n---\n\n${body}\n`;
   assert.equal(replaceRecordBody(note, body), note);
+});
+
+test("二重登録の確認では、「｜」より前の名前を、全角半角・大文字小文字・空白の違いなしで比べる", () => {
+  assert.equal(normalizeNameForCompare("テスト２｜プロジェクトノート作成"), "テスト2");
+  assert.equal(normalizeNameForCompare("  ＡＢＣ　 計画 "), "abc 計画");
+  assert.equal(stripDatePrefix("2026-11-15 - テスト２"), "テスト２");
+  assert.equal(stripDatePrefix("テスト２"), "テスト２");
+});
+
+test("同じ名前の、完了していないPJ-spanの記録・TaskChuteのタスクだけを見つける", () => {
+  const found = findDuplicates("テスト２", [
+    { path: "TaskChute/Task/2026-11-15 - テスト２.md", basename: "2026-11-15 - テスト２", frontmatter: { type: "project", title: "2026-11-15 - テスト２｜次のステージへ２" } },
+    { path: "TaskChute/Task/テスト２.md", basename: "テスト２", frontmatter: { tags: ["task"], title: "テスト２｜プロジェクトノート作成" } },
+    { path: "TaskChute/Task/別の名前.md", basename: "別の名前", frontmatter: { taskId: "tc-task-1", title: "テスト２" } },
+    { path: "TaskChute/Task/テスト２ 2.md", basename: "テスト２ 2", frontmatter: { type: "project", title: "テスト２", archived: true } },
+    { path: "メモ/テスト２.md", basename: "テスト２", frontmatter: { title: "テスト２" } },
+    { path: "TaskChute/Task/フロントマターなし.md", basename: "テスト２", frontmatter: undefined },
+    { path: "TaskChute/Task/テスト２.md", basename: "テスト２", frontmatter: { tags: ["task"] } },
+  ]);
+  assert.deepEqual(
+    found.map((note) => note.path),
+    ["TaskChute/Task/2026-11-15 - テスト２.md", "TaskChute/Task/テスト２.md", "TaskChute/Task/別の名前.md"]
+  );
+  assert.deepEqual(findDuplicates("  ", [{ path: "a.md", basename: "", frontmatter: { type: "project" } }]), []);
 });

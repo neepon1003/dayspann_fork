@@ -28,7 +28,8 @@ import {
   TranslationKey,
   TranslationVariables,
 } from "./src/i18n";
-import { DayspannEntryModal } from "./src/modals";
+import { DuplicateCandidate, findDuplicates } from "./src/duplicate-check";
+import { confirmDuplicate, DayspannEntryModal } from "./src/modals";
 import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
 import {
   buildTaskChuteFields,
@@ -571,6 +572,19 @@ export default class DayspannPlugin extends Plugin {
    */
   private async registerRecord(draft: DayspannDraft): Promise<void> {
     const host = this.app as unknown as TaskChuteHost;
+    const duplicates = this.findDuplicateNotes(draft.title, host);
+    if (
+      duplicates.length > 0 &&
+      !(await confirmDuplicate(
+        this.app,
+        draft.title,
+        duplicates.map((note) => note.path),
+        (key, variables) => this.t(key, variables)
+      ))
+    ) {
+      // 登録画面は閉じずに残し、名前を直して登録し直せるようにする。
+      throw new Error(this.t("error.duplicateCancelled"));
+    }
     if (!isTaskChuteEnabled(host)) {
       await this.createRecord(draft, this.normalizedStorageFolder());
       new Notice(this.t("notice.registered"));
@@ -591,6 +605,25 @@ export default class DayspannPlugin extends Plugin {
     const file = await this.createRecord(draft, folder, taskchute);
     new Notice(this.t("notice.registeredToday"));
     await this.reloadTaskChuteView(file, today);
+  }
+
+  /** PJ-span の記録フォルダと TaskChute のタスクフォルダから、同じ名前の完了していないノートを探す。 */
+  private findDuplicateNotes(name: string, host: TaskChuteHost): DuplicateCandidate[] {
+    const folders = [this.normalizedStorageFolder()];
+    if (isTaskChuteEnabled(host)) folders.push(getTaskChuteTaskFolder(host));
+
+    const candidates: DuplicateCandidate[] = [];
+    for (const folderPath of folders) {
+      const folder = this.app.vault.getAbstractFileByPath(normalizePath(folderPath));
+      if (!(folder instanceof TFolder)) continue;
+      const files: TFile[] = [];
+      this.collectMarkdownFiles(folder, files);
+      for (const file of files) {
+        const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        candidates.push({ path: file.path, basename: file.basename, frontmatter });
+      }
+    }
+    return findDuplicates(name, candidates);
   }
 
   /** UUID を作る関数（使えない環境なら null）。 */

@@ -14,6 +14,62 @@ import {
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
 
+/**
+ * 同じ名前がもうあるときの確認。「新しく作る」なら true、「やめる」や閉じたときは false。
+ */
+export function confirmDuplicate(
+  app: App,
+  name: string,
+  duplicatePaths: string[],
+  t: Translator
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    new DuplicateConfirmModal(app, name, duplicatePaths, t, resolve).open();
+  });
+}
+
+class DuplicateConfirmModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private name: string,
+    private duplicatePaths: string[],
+    private t: Translator,
+    private resolve: (create: boolean) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.t("duplicate.title"));
+    contentEl.createEl("p", { text: this.t("duplicate.message", { name: this.name }) });
+    const list = contentEl.createEl("ul");
+    for (const path of this.duplicatePaths) list.createEl("li", { text: path });
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const back = actions.createEl("button", { text: this.t("duplicate.back"), cls: "mod-cta" });
+    back.addEventListener("click", () => this.answer(false));
+    const create = actions.createEl("button", { text: this.t("duplicate.create") });
+    create.addEventListener("click", () => this.answer(true));
+    window.setTimeout(() => back.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // ×ボタンや Esc で閉じたときは「やめる」と同じにする。
+    if (!this.answered) this.resolve(false);
+  }
+
+  private answer(create: boolean): void {
+    this.answered = true;
+    this.resolve(create);
+    this.close();
+  }
+}
+
 export class DayspannEntryModal extends Modal {
   private draft: DayspannDraft;
   private errorEl?: HTMLElement;
