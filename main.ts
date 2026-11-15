@@ -605,8 +605,8 @@ export default class DayspannPlugin extends Plugin {
     taskchute?: TaskChuteNewTaskFields
   ): Promise<TFile> {
     await this.ensureFolder(folder);
-    const name = sanitizeFileName(draft.title, this.t("default.entry"));
-    const base = draft.date ? `${draft.date} - ${name}` : name;
+    // ファイル名は名前だけにする（日付は入れない）。日付は frontmatter の date に入っている。
+    const base = sanitizeFileName(draft.title, this.t("default.entry"));
     let path = `${folder}/${base}.md`;
     let index = 2;
     while (this.app.vault.getAbstractFileByPath(path)) {
