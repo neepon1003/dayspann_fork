@@ -70,6 +70,54 @@ class DuplicateConfirmModal extends Modal {
   }
 }
 
+/**
+ * 完了するときの確認。「完了にする」なら true、「まだ」や閉じたときは false。
+ */
+export function confirmGoalComplete(app: App, goal: string, t: Translator): Promise<boolean> {
+  return new Promise((resolve) => {
+    new GoalCompleteModal(app, goal, t, resolve).open();
+  });
+}
+
+class GoalCompleteModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private goal: string,
+    private t: Translator,
+    private resolve: (complete: boolean) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.t("completeConfirm.title"));
+    contentEl.createEl("p", { text: this.goal });
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const notYet = actions.createEl("button", { text: this.t("completeConfirm.notYet") });
+    notYet.addEventListener("click", () => this.answer(false));
+    const complete = actions.createEl("button", { text: this.t("completeConfirm.confirm"), cls: "mod-cta" });
+    complete.addEventListener("click", () => this.answer(true));
+    window.setTimeout(() => complete.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // ×ボタンや Esc で閉じたときは「まだ」と同じにする。
+    if (!this.answered) this.resolve(false);
+  }
+
+  private answer(complete: boolean): void {
+    this.answered = true;
+    this.resolve(complete);
+    this.close();
+  }
+}
+
 export class DayspannEntryModal extends Modal {
   private draft: DayspannDraft;
   private errorEl?: HTMLElement;

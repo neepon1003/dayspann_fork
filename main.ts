@@ -29,7 +29,8 @@ import {
   TranslationVariables,
 } from "./src/i18n";
 import { DuplicateCandidate, findDuplicates } from "./src/duplicate-check";
-import { confirmDuplicate, DayspannEntryModal } from "./src/modals";
+import { appendLogLineToFile } from "./src/log-entry";
+import { confirmDuplicate, confirmGoalComplete, DayspannEntryModal } from "./src/modals";
 import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
 import {
   buildTaskChuteFields,
@@ -288,6 +289,15 @@ export default class DayspannPlugin extends Plugin {
   }
 
   async setRecordArchived(record: DayspannRecord, archived: boolean): Promise<void> {
+    // 完了にするとき、完了条件が書いてあれば先に確認する。空なら確認せずに完了にする。
+    if (archived && record.goal) {
+      const confirmed = await confirmGoalComplete(this.app, record.goal, (key, variables) => this.t(key, variables));
+      if (!confirmed) return;
+    }
+    if (archived) {
+      const logLine = `- ${this.todayKey()} 完了`;
+      await this.app.vault.process(record.file, (content) => appendLogLineToFile(content, logLine));
+    }
     await this.app.fileManager.processFrontMatter(
       record.file,
       (frontmatter: Record<string, unknown>) => {

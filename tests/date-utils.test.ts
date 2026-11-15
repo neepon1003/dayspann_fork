@@ -27,6 +27,7 @@ import {
 import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import { findDuplicates, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
+import { appendLogLine, appendLogLineToFile } from "../src/log-entry";
 import {
   buildNewNoteBody,
   buildNewNoteTitle,
@@ -562,4 +563,32 @@ test("同じ名前の、完了していないPJ-spanの記録・TaskChuteのタ�
     ["TaskChute/Task/2026-11-15 - テスト２.md", "TaskChute/Task/テスト２.md", "TaskChute/Task/別の名前.md"]
   );
   assert.deepEqual(findDuplicates("  ", [{ path: "a.md", basename: "", frontmatter: { type: "project" } }]), []);
+});
+
+test("ログが見出しの途中にあるとき、その見出しのいちばん下に行を足す", () => {
+  const body = "## 概要\n\n概要の文\n\n## ログ\n- 2026-10-01 開始\n\n## 振り返り\n\nあとで書く\n";
+  assert.equal(
+    appendLogLine(body, "- 2026-11-15 完了"),
+    "## 概要\n\n概要の文\n\n## ログ\n- 2026-10-01 開始\n- 2026-11-15 完了\n\n## 振り返り\n\nあとで書く\n"
+  );
+  assert.equal(createTranslator("ja")("completeConfirm.title"), "完了条件を達成しましたか？");
+  assert.equal(createTranslator("en")("completeConfirm.notYet"), "Not yet");
+});
+
+test("ログが見出しの末尾にあるとき、そのいちばん下に行を足す", () => {
+  const body = buildNewNoteBody("選んだ文章");
+  assert.equal(
+    appendLogLine(body, "- 2026-11-15 完了"),
+    "## 概要\n\n選んだ文章\n\n## 次の一手\n\n## ログ\n- 2026-11-15 完了"
+  );
+});
+
+test("ログの見出しがなければ、末尾に「## ログ」を作って行を足す", () => {
+  assert.equal(appendLogLine("前からある文章", "- 2026-11-15 完了"), "前からある文章\n## ログ\n- 2026-11-15 完了\n");
+  assert.equal(appendLogLine("", "- 2026-11-15 完了"), "## ログ\n- 2026-11-15 完了\n");
+  const note = "---\ntitle: テスト\ngoal: 当選結果を確認する\n---\n\n## 概要\n\n## 次の一手\n";
+  assert.equal(
+    appendLogLineToFile(note, "- 2026-11-15 完了"),
+    "---\ntitle: テスト\ngoal: 当選結果を確認する\n---\n\n## 概要\n\n## 次の一手\n## ログ\n- 2026-11-15 完了\n"
+  );
 });
