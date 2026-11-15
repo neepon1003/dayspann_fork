@@ -6,6 +6,7 @@ import {
   parseDateKey,
   readDateKey,
 } from "./date-utils";
+import { buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
 import { readGoal } from "./record-edit";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 import { isTaskChuteTask, readTargetDate, TaskChuteNewTaskFields } from "./taskchute";
@@ -41,13 +42,15 @@ export interface DayspannDraft {
 }
 
 /**
- * 新しい記録のノートの中身を作る。
+ * 新しい記録のノートの中身を作る（新しく登録するときだけ使う）。
+ * タイトルの後ろに「｜プロジェクトノート作成」を付け、notetoolbar: [btn] と「概要」「次の一手」「ログ」の見出しを入れる。
  * taskchute を渡すと、TaskChute のタスク（tags・taskId・target_date）としても作る。
  */
 export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTaskFields): string {
   const frontmatter: Record<string, string | number | boolean | string[]> = {
     type: "project",
-    title: draft.title.trim(),
+    title: buildNewNoteTitle(draft.title),
+    notetoolbar: [...NEW_NOTE_TOOLBAR],
     date: draft.date,
     display: draft.displayMode ?? DEFAULT_DISPLAY_MODE,
     created: draft.created ?? new Date().toISOString(),
@@ -68,8 +71,7 @@ export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTa
   }
 
   const yaml = stringifyYaml(frontmatter).replace(/\s+$/, "");
-  const body = draft.excerpt.trim();
-  return `---\n${yaml}\n---\n${body ? `\n${body}\n` : ""}`;
+  return `---\n${yaml}\n---\n\n${buildNewNoteBody(draft.excerpt)}\n`;
 }
 
 export function parseRecord(file: TFile, content: string): DayspannRecord | null {

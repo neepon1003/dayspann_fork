@@ -11,6 +11,7 @@ import {
 } from "./date-utils";
 import { durationUnit } from "./i18n";
 import { DayspannRecord } from "./model";
+import { displayTitle, excerptForCard } from "./note-template";
 import { DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
@@ -286,10 +287,11 @@ export class DayspannView extends ItemView {
     });
 
     const accent = card.createDiv("dayspann-card-accent");
-    accent.setText(record.title.slice(0, 1));
+    const title = displayTitle(record.title);
+    accent.setText(title.slice(0, 1));
 
     const content = card.createDiv("dayspann-card-content");
-    content.createEl("h3", { text: record.title });
+    content.createEl("h3", { text: title });
     if (record.date) {
       content.createDiv({
         text: formatLocalizedDate(record.date, this.plugin.locale()),
@@ -302,8 +304,9 @@ export class DayspannView extends ItemView {
       goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
       setTooltip(goal, record.goal);
     }
-    if (record.excerpt) {
-      content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
+    const excerpt = excerptForCard(record.excerpt);
+    if (excerpt) {
+      content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
     }
 
     // 日数とボタンを同じ行に並べて、カードの高さを抑える。

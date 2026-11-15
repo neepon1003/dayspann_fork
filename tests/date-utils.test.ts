@@ -27,6 +27,13 @@ import {
 import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import {
+  buildNewNoteBody,
+  buildNewNoteTitle,
+  displayTitle,
+  excerptForCard,
+  NEW_NOTE_TOOLBAR,
+} from "../src/note-template";
+import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
   chooseNewRecordFolder,
@@ -484,4 +491,50 @@ test("新しい記録は、PJ-spanとTaskChuteの両方から見えるフォル�
     folder: "pj-span",
     visibleToTaskChute: false,
   });
+});
+
+test("新しいノートのタイトルは「名前｜プロジェクトノート作成」にし、二重には付けない", () => {
+  assert.equal(buildNewNoteTitle("はばタンPAY+"), "はばタンPAY+｜プロジェクトノート作成");
+  assert.equal(buildNewNoteTitle("  テスト  "), "テスト｜プロジェクトノート作成");
+  assert.equal(buildNewNoteTitle("テスト｜プロジェクトノート作成"), "テスト｜プロジェクトノート作成");
+  // 区切りは全角の ｜（U+FF5C）
+  assert.equal(buildNewNoteTitle("A").charCodeAt(1), 0xff5c);
+  assert.deepEqual(NEW_NOTE_TOOLBAR, ["btn"]);
+});
+
+test("カードには「｜プロジェクトノート作成」を外した名前を出す", () => {
+  assert.equal(displayTitle("はばタンPAY+｜プロジェクトノート作成"), "はばタンPAY+");
+  assert.equal(displayTitle("はばタンPAY+第6弾｜当選結果を確認する"), "はばタンPAY+第6弾｜当選結果を確認する");
+  assert.equal(displayTitle("｜プロジェクトノート作成"), "｜プロジェクトノート作成");
+});
+
+test("新しいノートの本文は「概要」「次の一手」「ログ」で、残しておく文章は「概要」の下に入る", () => {
+  assert.equal(buildNewNoteBody(""), "## 概要\n\n## 次の一手\n\n## ログ");
+  assert.equal(buildNewNoteBody("  選んだ文章\n2行目  "), "## 概要\n\n選んだ文章\n2行目\n\n## 次の一手\n\n## ログ");
+});
+
+test("カードの抜き書きは見出しの行を外して1行にまとめる", () => {
+  assert.equal(excerptForCard(buildNewNoteBody("")), "");
+  assert.equal(excerptForCard(buildNewNoteBody("選んだ文章\n2行目")), "選んだ文章 2行目");
+  assert.equal(excerptForCard("前からある文章\n\n続き"), "前からある文章 続き");
+  assert.equal(excerptForCard("#task のメモ"), "#task のメモ");
+});
+
+test("編集の保存では、タイトルの後ろの言葉・notetoolbar・本文の見出しを変えない", () => {
+  const frontmatter: Record<string, unknown> = {
+    title: "テスト｜プロジェクトノート作成",
+    notetoolbar: ["btn"],
+    date: "2026-12-22",
+  };
+  applyDraftToFrontmatter(frontmatter, {
+    title: "テスト｜プロジェクトノート作成",
+    date: "2026-12-22",
+    excerpt: "",
+  });
+  assert.equal(frontmatter.title, "テスト｜プロジェクトノート作成");
+  assert.deepEqual(frontmatter.notetoolbar, ["btn"]);
+
+  const body = buildNewNoteBody("選んだ文章");
+  const note = `---\ntitle: テスト\n---\n\n${body}\n`;
+  assert.equal(replaceRecordBody(note, body), note);
 });
