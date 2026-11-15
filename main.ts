@@ -31,10 +31,16 @@ import {
 import { DayspannEntryModal } from "./src/modals";
 import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
 import {
+  buildTaskChuteFields,
   canReloadTaskChuteView,
+  chooseNewRecordFolder,
+  generateTaskChuteTaskId,
+  getTaskChuteTaskFolder,
+  isTaskChuteEnabled,
   readTargetDate,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
+  TaskChuteNewTaskFields,
 } from "./src/taskchute";
 import {
   DayspannDraft,
@@ -221,8 +227,7 @@ export default class DayspannPlugin extends Plugin {
       this.t("action.register"),
       (key, variables) => this.t(key, variables),
       async (draft) => {
-        await this.createRecord(draft);
-        new Notice(this.t("notice.registered"));
+        await this.registerRecord(draft);
         await this.activateView();
       }
     ).open();
@@ -236,8 +241,7 @@ export default class DayspannPlugin extends Plugin {
       this.t("action.register"),
       (key, variables) => this.t(key, variables),
       async (draft) => {
-        await this.createRecord(draft);
-        new Notice(this.t("notice.registered"));
+        await this.registerRecord(draft);
         await this.refreshViews();
       }
     ).open();
@@ -249,6 +253,7 @@ export default class DayspannPlugin extends Plugin {
       {
         title: record.title,
         date: record.date,
+        goal: record.goal,
         displayMode: record.displayMode,
         archived: record.archived,
         completed: record.completed,
@@ -560,8 +565,45 @@ export default class DayspannPlugin extends Plugin {
     return value || DEFAULT_SETTINGS.storageFolder;
   }
 
-  private async createRecord(draft: DayspannDraft): Promise<TFile> {
-    const folder = this.normalizedStorageFolder();
+  /**
+   * 新しい記録を作ってお知らせを出す。
+   * TaskChute が有効なら、TaskChute のタスク（今日の一覧に入る）としても作り、TaskChute の画面が開いていれば読み直す。
+   */
+  private async registerRecord(draft: DayspannDraft): Promise<void> {
+    const host = this.app as unknown as TaskChuteHost;
+    if (!isTaskChuteEnabled(host)) {
+      await this.createRecord(draft, this.normalizedStorageFolder());
+      new Notice(this.t("notice.registered"));
+      return;
+    }
+
+    const taskFolder = getTaskChuteTaskFolder(host);
+    const { folder, visibleToTaskChute } = chooseNewRecordFolder(this.normalizedStorageFolder(), taskFolder);
+    if (!visibleToTaskChute) {
+      // TaskChute から見えない場所にタスクの項目だけ書いても今日の一覧には出ないので、今までどおりの記録にする。
+      await this.createRecord(draft, folder);
+      new Notice(this.t("notice.registeredOutsideTaskChute", { folder: taskFolder }));
+      return;
+    }
+
+    const today = this.todayKey();
+    const taskchute = buildTaskChuteFields(today, generateTaskChuteTaskId(this.randomUUID()));
+    const file = await this.createRecord(draft, folder, taskchute);
+    new Notice(this.t("notice.registeredToday"));
+    await this.reloadTaskChuteView(file, today);
+  }
+
+  /** UUID を作る関数（使えない環境なら null）。 */
+  private randomUUID(): (() => string) | null {
+    const cryptoApi = window.crypto;
+    return typeof cryptoApi?.randomUUID === "function" ? () => cryptoApi.randomUUID() : null;
+  }
+
+  private async createRecord(
+    draft: DayspannDraft,
+    folder: string,
+    taskchute?: TaskChuteNewTaskFields
+  ): Promise<TFile> {
     await this.ensureFolder(folder);
     const name = sanitizeFileName(draft.title, this.t("default.entry"));
     const base = draft.date ? `${draft.date} - ${name}` : name;
@@ -571,7 +613,7 @@ export default class DayspannPlugin extends Plugin {
       path = `${folder}/${base} ${index}.md`;
       index += 1;
     }
-    return this.app.vault.create(path, serializeRecord(draft));
+    return this.app.vault.create(path, serializeRecord(draft, taskchute));
   }
 
   private async ensureFolder(folder: string): Promise<void> {

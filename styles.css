@@ -232,6 +232,36 @@
   font-size: var(--font-ui-small);
 }
 
+/* 完了条件（goal）：日付の下に小さく 1 行。長いときは「…」で切る */
+.dayspann-card-goal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.3;
+}
+
+.dayspann-card-goal-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.dayspann-card-goal-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.dayspann-card-goal-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dayspann-card-excerpt {
   margin-top: 7px;
   overflow: hidden;

@@ -60,6 +60,18 @@ export class DayspannEntryModal extends Modal {
       });
 
     new Setting(contentEl)
+      .setName(this.t("modal.goal"))
+      .setDesc(this.t("modal.goalDesc"))
+      .addText((text) => {
+        text
+          .setPlaceholder(this.t("modal.goalPlaceholder"))
+          .setValue(this.draft.goal ?? "")
+          .onChange((value) => {
+            this.draft.goal = value;
+          });
+      });
+
+    new Setting(contentEl)
       .setName(this.t("modal.display"))
       .setDesc(this.t("modal.displayDesc"))
       .addDropdown((dropdown) => {

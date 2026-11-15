@@ -24,13 +24,19 @@ import {
   isLinkedSourceReference,
   parseSourceReference,
 } from "../src/source-link";
-import { applyDraftToFrontmatter, replaceRecordBody } from "../src/record-edit";
+import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import {
+  buildTaskChuteFields,
   canReloadTaskChuteView,
+  chooseNewRecordFolder,
+  generateTaskChuteTaskId,
+  getTaskChuteTaskFolder,
   hasTaskTag,
+  isTaskChuteEnabled,
   isTaskChuteTask,
   readTargetDate,
+  TASKCHUTE_DEFAULT_TASK_FOLDER,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
 } from "../src/taskchute";
@@ -366,4 +372,116 @@ test("アーカイブ済みのカードは「…」だけにする", () => {
     ),
     { today: "none", complete: false, postponeInMenu: false }
   );
+});
+
+test("完了条件（goal）は 1 行の文字として読み、文字でなければ空にする", () => {
+  assert.equal(readGoal("  当選結果を確認して\n家族に共有する  "), "当選結果を確認して 家族に共有する");
+  assert.equal(readGoal(""), "");
+  assert.equal(readGoal(undefined), "");
+  assert.equal(readGoal(123), "");
+  assert.equal(createTranslator("ja")("modal.goal"), "完了条件");
+  assert.equal(createTranslator("en")("modal.goal"), "Completion condition");
+});
+
+test("編集の保存で goal を書き、空なら goal の項目を消す（TaskChuteの項目は残す）", () => {
+  const frontmatter: Record<string, unknown> = {
+    target_date: "2026-11-15",
+    taskId: "tc-task-abc",
+    tags: ["task"],
+    type: "dayspann",
+    title: "はばタンPAY+",
+    date: "2026-12-22",
+  };
+  applyDraftToFrontmatter(frontmatter, {
+    title: "はばタンPAY+",
+    date: "2026-12-22",
+    goal: "  当選結果を確認して家族に共有する ",
+    excerpt: "",
+  });
+  assert.equal(frontmatter.goal, "当選結果を確認して家族に共有する");
+
+  applyDraftToFrontmatter(frontmatter, { title: "はばタンPAY+", date: "2026-12-22", goal: "   ", excerpt: "" });
+  assert.equal("goal" in frontmatter, false);
+  assert.equal(frontmatter.target_date, "2026-11-15");
+  assert.equal(frontmatter.taskId, "tc-task-abc");
+  assert.deepEqual(frontmatter.tags, ["task"]);
+  assert.equal(frontmatter.type, "dayspann");
+});
+
+test("新しく登録した記録のTaskChuteの項目は、今日の target_date・taskId・tags: [task]", () => {
+  const fields = buildTaskChuteFields("2026-11-15", "tc-task-1234");
+  assert.deepEqual(fields, { target_date: "2026-11-15", taskId: "tc-task-1234", tags: ["task"] });
+  // PJ-span の読み方でも TaskChute のタスクで、今日の一覧に入っている形になる
+  assert.equal(isTaskChuteTask(fields as unknown as Record<string, unknown>), true);
+  assert.equal(readTargetDate(fields.target_date), "2026-11-15");
+  assert.equal(
+    planCardActions({ archived: false, date: "2026-12-22", taskchute: { targetDate: fields.target_date } }, "2026-11-15").today,
+    "inToday"
+  );
+});
+
+test("taskId は TaskChute と同じ tc-task- ＋ UUID の形で作る", () => {
+  assert.equal(
+    generateTaskChuteTaskId(() => "123e4567-e89b-12d3-a456-426614174000"),
+    "tc-task-123e4567-e89b-12d3-a456-426614174000"
+  );
+  // UUID を作れないときは TaskChute と同じく時刻＋乱数
+  assert.match(generateTaskChuteTaskId(null), /^tc-task-[0-9a-z]+-[0-9a-z]+$/);
+  assert.notEqual(generateTaskChuteTaskId(null), generateTaskChuteTaskId(null));
+});
+
+test("TaskChuteが有効かどうかと、TaskChuteのタスクフォルダを読む", () => {
+  assert.equal(isTaskChuteEnabled({ plugins: { enabledPlugins: new Set(["taskchute-plus"]) } }), true);
+  assert.equal(isTaskChuteEnabled({ plugins: { enabledPlugins: new Set(["pj-span"]) } }), false);
+  assert.equal(isTaskChuteEnabled({}), false);
+
+  assert.equal(
+    getTaskChuteTaskFolder({
+      plugins: { plugins: { "taskchute-plus": { pathManager: { getTaskFolderPath: () => "Work/TaskChute/Task/" } } } },
+    }),
+    "Work/TaskChute/Task"
+  );
+  assert.equal(getTaskChuteTaskFolder({ plugins: { plugins: {} } }), TASKCHUTE_DEFAULT_TASK_FOLDER);
+  assert.equal(
+    getTaskChuteTaskFolder({
+      plugins: {
+        plugins: {
+          "taskchute-plus": {
+            pathManager: {
+              getTaskFolderPath: () => {
+                throw new Error("x");
+              },
+            },
+          },
+        },
+      },
+    }),
+    "TaskChute/Task"
+  );
+});
+
+test("新しい記録は、PJ-spanとTaskChuteの両方から見えるフォルダに置く", () => {
+  // 記録フォルダが TaskChute フォルダ全体 → タスクフォルダに置く
+  assert.deepEqual(chooseNewRecordFolder("TaskChute", "TaskChute/Task"), {
+    folder: "TaskChute/Task",
+    visibleToTaskChute: true,
+  });
+  // 記録フォルダがタスクフォルダそのもの、またはその下 → 記録フォルダのまま
+  assert.deepEqual(chooseNewRecordFolder("TaskChute/Task", "TaskChute/Task"), {
+    folder: "TaskChute/Task",
+    visibleToTaskChute: true,
+  });
+  assert.deepEqual(chooseNewRecordFolder("TaskChute/Task/PJ", "TaskChute/Task"), {
+    folder: "TaskChute/Task/PJ",
+    visibleToTaskChute: true,
+  });
+  // 名前が似ているだけの別フォルダや、まったく別の場所 → TaskChute からは見えない
+  assert.deepEqual(chooseNewRecordFolder("TaskChute/Tasks", "TaskChute/Task"), {
+    folder: "TaskChute/Tasks",
+    visibleToTaskChute: false,
+  });
+  assert.deepEqual(chooseNewRecordFolder("pj-span", "TaskChute/Task"), {
+    folder: "pj-span",
+    visibleToTaskChute: false,
+  });
 });

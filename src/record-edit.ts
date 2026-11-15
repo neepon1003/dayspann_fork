@@ -1,9 +1,14 @@
 import type { DayspannDraft } from "./model";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 
+/** 完了条件（goal）を 1 行の文字にする。改行や続いた空白は 1 つの空白にまとめる。文字でなければ空文字。 */
+export function readGoal(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+}
+
 /**
  * 編集画面の内容を、いまの frontmatter に上書きする。
- * PJ-span が使うキーだけを変え、type・created・TaskChute の taskId / tags / target_date などはそのまま残す。
+ * PJ-span が使うキー（title・date・goal・display・archived・completed・source・sourceLine）だけを変え、type・created・TaskChute の taskId / tags / target_date などはそのまま残す。
  */
 export function applyDraftToFrontmatter(
   frontmatter: Record<string, unknown>,
@@ -12,6 +17,9 @@ export function applyDraftToFrontmatter(
   frontmatter.title = draft.title.trim();
   if (draft.date) frontmatter.date = draft.date;
   else delete frontmatter.date;
+  const goal = readGoal(draft.goal);
+  if (goal) frontmatter.goal = goal;
+  else delete frontmatter.goal;
   if (draft.displayMode) frontmatter.display = draft.displayMode;
 
   if (draft.archived) frontmatter.archived = true;

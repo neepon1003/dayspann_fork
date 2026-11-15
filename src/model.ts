@@ -6,13 +6,16 @@ import {
   parseDateKey,
   readDateKey,
 } from "./date-utils";
+import { readGoal } from "./record-edit";
 import { formatSourceReference, parseSourceReference } from "./source-link";
-import { isTaskChuteTask, readTargetDate } from "./taskchute";
+import { isTaskChuteTask, readTargetDate, TaskChuteNewTaskFields } from "./taskchute";
 
 export interface DayspannRecord {
   file: TFile;
   title: string;
   date: string;
+  /** 完了条件（frontmatter の goal）。書いていなければ空文字。 */
+  goal: string;
   displayMode: DayspannDisplayMode;
   archived: boolean;
   completed?: string;
@@ -27,6 +30,7 @@ export interface DayspannRecord {
 export interface DayspannDraft {
   title: string;
   date: string;
+  goal?: string;
   displayMode?: DayspannDisplayMode;
   archived?: boolean;
   completed?: string;
@@ -36,8 +40,12 @@ export interface DayspannDraft {
   created?: string;
 }
 
-export function serializeRecord(draft: DayspannDraft): string {
-  const frontmatter: Record<string, string | number | boolean> = {
+/**
+ * 新しい記録のノートの中身を作る。
+ * taskchute を渡すと、TaskChute のタスク（tags・taskId・target_date）としても作る。
+ */
+export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTaskFields): string {
+  const frontmatter: Record<string, string | number | boolean | string[]> = {
     type: "project",
     title: draft.title.trim(),
     date: draft.date,
@@ -45,10 +53,19 @@ export function serializeRecord(draft: DayspannDraft): string {
     created: draft.created ?? new Date().toISOString(),
   };
 
+  const goal = readGoal(draft.goal);
+  if (goal) frontmatter.goal = goal;
+
   if (draft.archived) frontmatter.archived = true;
   if (draft.completed) frontmatter.completed = draft.completed;
   if (draft.sourcePath) frontmatter.source = formatSourceReference(draft.sourcePath);
   if (typeof draft.sourceLine === "number") frontmatter.sourceLine = draft.sourceLine;
+
+  if (taskchute) {
+    frontmatter.target_date = taskchute.target_date;
+    frontmatter.taskId = taskchute.taskId;
+    frontmatter.tags = [...taskchute.tags];
+  }
 
   const yaml = stringifyYaml(frontmatter).replace(/\s+$/, "");
   const body = draft.excerpt.trim();
@@ -90,6 +107,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     file,
     title,
     date,
+    goal: readGoal(data.goal),
     displayMode: normalizeDisplayMode(data.display),
     archived: data.archived === true,
     completed: readDateKey(data.completed) || undefined,

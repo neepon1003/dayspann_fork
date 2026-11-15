@@ -296,6 +296,12 @@ export class DayspannView extends ItemView {
         cls: "dayspann-card-date",
       });
     }
+    if (record.goal) {
+      const goal = content.createDiv({ cls: "dayspann-card-goal" });
+      setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
+      goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
+      setTooltip(goal, record.goal);
+    }
     if (record.excerpt) {
       content.createDiv({ text: record.excerpt.replace(/\s+/g, " "), cls: "dayspann-card-excerpt" });
     }
