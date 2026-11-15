@@ -352,6 +352,18 @@
   color: var(--text-normal);
 }
 
+/* しばらく更新していないカードの印。目立たせず、日数の横にアイコンだけ出す。 */
+.dayspann-stalled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  color: var(--text-muted);
+}
+
 /* 「今日やる」は緑の丸ボタンで目立たせる。 */
 .dayspann-today-button {
   --dayspann-today-color: var(--color-green, var(--dayspann-future-color));

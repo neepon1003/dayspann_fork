@@ -55,6 +55,7 @@ import {
 import {
   DEFAULT_SECTION_ORDER,
   DEFAULT_SOON_DAYS,
+  DEFAULT_STALLED_DAYS,
   DayspannSectionKind,
   MAX_SOON_DAYS,
   normalizeCollapsedSections,
@@ -73,6 +74,7 @@ export interface DayspannSettings {
   futureColor: string;
   pastColor: string;
   soonDays: number;
+  stalledDays: number;
   sectionOrder: DayspannSectionKind[];
   collapsedSections: DayspannSectionKind[];
   undatedCollapsed: boolean;
@@ -84,6 +86,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   futureColor: "#22c55e",
   pastColor: "#ef4444",
   soonDays: DEFAULT_SOON_DAYS,
+  stalledDays: DEFAULT_STALLED_DAYS,
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   collapsedSections: [],
   undatedCollapsed: false,
@@ -475,6 +478,7 @@ export default class DayspannPlugin extends Plugin {
       ...saved,
       storageFolder,
       soonDays: parseSoonDays(saved?.soonDays) ?? DEFAULT_SOON_DAYS,
+      stalledDays: parseSoonDays(saved?.stalledDays) ?? DEFAULT_STALLED_DAYS,
       sectionOrder: normalizeSectionOrder(saved?.sectionOrder),
       collapsedSections: normalizeCollapsedSections(saved?.collapsedSections),
       undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
@@ -779,6 +783,21 @@ class DayspannSettingTab extends PluginSettingTab {
               });
             },
           },
+          {
+            name: this.plugin.t("setting.stalledDays"),
+            desc: this.plugin.t("setting.stalledDaysDesc"),
+            render: (setting) => {
+              setting.addText((text) => {
+                text.inputEl.type = "number";
+                text.inputEl.min = "0";
+                text.inputEl.max = String(MAX_SOON_DAYS);
+                text
+                  .setPlaceholder(String(DEFAULT_STALLED_DAYS))
+                  .setValue(String(this.plugin.settings.stalledDays))
+                  .onChange((value) => void this.setStalledDays(value));
+              });
+            },
+          },
         ],
       },
       {
@@ -833,6 +852,14 @@ class DayspannSettingTab extends PluginSettingTab {
     const days = parseSoonDays(value);
     if (days === null) return;
     this.plugin.settings.soonDays = days;
+    await this.plugin.saveSettings();
+    await this.plugin.refreshViews();
+  }
+
+  private async setStalledDays(value: string): Promise<void> {
+    const days = parseSoonDays(value);
+    if (days === null) return;
+    this.plugin.settings.stalledDays = days;
     await this.plugin.saveSettings();
     await this.plugin.refreshViews();
   }

@@ -11,6 +11,7 @@ import {
   parseDateKey,
   readDateKey,
   shiftDateKey,
+  stalledDays,
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
@@ -591,4 +592,30 @@ test("ログの見出しがなければ、末尾に「## ログ」を作って�
     appendLogLineToFile(note, "- 2026-11-15 完了"),
     "---\ntitle: テスト\ngoal: 当選結果を確認する\n---\n\n## 概要\n\n## 次の一手\n## ログ\n- 2026-11-15 完了\n"
   );
+});
+
+test("更新から設定の日数以上たっているときだけ、止まっている日数を返す", () => {
+  const now = new Date(2026, 10, 15, 12, 0, 0);
+  const at = (monthDay: number, hours: number, minutes = 0) =>
+    new Date(2026, 10, monthDay, hours, minutes, 0).getTime();
+
+  // 設定より少ない日数（2日前、設定は3日）
+  assert.equal(stalledDays(at(13, 12), now, 3), null);
+  // ちょうど設定の日数（3日前）
+  assert.equal(stalledDays(at(12, 12), now, 3), 3);
+  // 設定より多い日数
+  assert.equal(stalledDays(at(10, 12), now, 3), 5);
+  // 設定が 0 ならオフ（何日たっていても印をつけない）
+  assert.equal(stalledDays(at(1, 12), now, 0), null);
+  // 同じ日なら印をつけない
+  assert.equal(stalledDays(at(15, 9), now, 3), null);
+
+  // 日付をまたぐとき：11/12 23:30 から 11/15 00:30 はカレンダー日で 3 日
+  const justAfterMidnight = new Date(2026, 10, 15, 0, 30, 0);
+  assert.equal(stalledDays(at(12, 23, 30), justAfterMidnight, 3), 3);
+  // 11/13 23:30 から 11/15 00:30 はカレンダー日で 2 日なので、設定が 3 なら印をつけない
+  assert.equal(stalledDays(at(13, 23, 30), justAfterMidnight, 3), null);
+
+  assert.equal(createTranslator("ja")("stalled.tooltip", { days: 3 }), "3日より前から更新されていません");
+  assert.equal(createTranslator("en")("stalled.tooltip", { days: 3 }), "Not updated for more than 3 days");
 });

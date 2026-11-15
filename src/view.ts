@@ -8,6 +8,7 @@ import {
   formatCompletedBadgeDate,
   formatDateSpan,
   formatLocalizedDate,
+  stalledDays,
 } from "./date-utils";
 import { durationUnit } from "./i18n";
 import { DayspannRecord } from "./model";
@@ -343,6 +344,18 @@ export class DayspannView extends ItemView {
 	 cls: "dayspann-count-unit dayspann-count-suffix",
 	});
        }		
+    }
+
+    // 完了していない記録で、ノートを設定の日数以上更新していなければ印を出す。
+    const stalled = record.archived || record.completed
+      ? null
+      : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
+    if (stalled !== null) {
+      const mark = countRow.createDiv("dayspann-stalled");
+      setIcon(mark, "hourglass");
+      const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
+      setTooltip(mark, tooltip);
+      mark.setAttribute("aria-label", tooltip);
     }
 
     const plan = planCardActions(record, this.plugin.todayKey());

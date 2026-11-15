@@ -212,3 +212,15 @@ export function formatLocalizedDate(dateKey: string, locale: "ja" | "en"): strin
     timeZone: "UTC",
   }).format(date);
 }
+
+/**
+ * ノートの最終更新から、いままで何カレンダー日たっているか。
+ * 設定の日数（thresholdDays）以上ならその日数を返す。
+ * 未満、または設定が 0（オフ）のときは null。
+ * 日付の境目は、ローカルの日付で見る。
+ */
+export function stalledDays(mtimeMs: number, now: Date, thresholdDays: number): number | null {
+  if (thresholdDays <= 0) return null;
+  const days = differenceInCalendarDays(toDateKey(now), toDateKey(new Date(mtimeMs)));
+  return days >= thresholdDays ? days : null;
+}

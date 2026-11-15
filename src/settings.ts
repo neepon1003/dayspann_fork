@@ -3,6 +3,7 @@ export type DayspannSectionKind = "future" | "today" | "past";
 export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["today", "future", "past"];
 
 export const DEFAULT_SOON_DAYS = 7;
+export const DEFAULT_STALLED_DAYS = 3;
 export const MAX_SOON_DAYS = 365;
 
 /** 「もうすぐ」の日数を読み取る。0〜365 の整数だけを受け付け、それ以外は null。 */
