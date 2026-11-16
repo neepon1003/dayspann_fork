@@ -5,6 +5,7 @@ import {
   countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
+  dueSoonDays,
   formatArchiveMonthParts,
   formatCompletedBadgeDate,
   formatCompletedCardDate,
@@ -745,4 +746,21 @@ test("タイトルの「｜」より後ろを次の一手として分ける", ()
   assert.deepEqual(splitTitle("｜プロジェクトノート作成"), { name: "", nextAction: "プロジェクトノート作成" });
   assert.equal(createTranslator("ja")("view.nextAction"), "次の一手");
   assert.equal(createTranslator("en")("view.nextAction"), "Next action");
+});
+
+test("期日が今日から設定の日数後までなら、期日が近いとして残りの日数を返す", () => {
+  assert.equal(dueSoonDays("2026-11-16", "2026-11-16", 7), 0);
+  assert.equal(dueSoonDays("2026-11-17", "2026-11-16", 7), 1);
+  assert.equal(dueSoonDays("2026-11-23", "2026-11-16", 7), 7);
+  assert.equal(dueSoonDays("2026-11-24", "2026-11-16", 7), null);
+  assert.equal(dueSoonDays("2026-11-15", "2026-11-16", 7), null);
+  assert.equal(dueSoonDays("", "2026-11-16", 7), null);
+  assert.equal(dueSoonDays("2026-11-16", "2026-11-16", 0), null);
+  assert.equal(dueSoonDays("2026-12-01", "2026-11-28", 7), 3);
+  assert.equal(createTranslator("ja")("dueSoon.tooltip", { days: 3 }), "期日まであと3日");
+  assert.equal(createTranslator("ja")("dueSoon.tomorrow"), "明日が期日");
+  assert.equal(createTranslator("ja")("dueSoon.today"), "今日が期日");
+  assert.equal(createTranslator("en")("dueSoon.tooltip", { days: 3 }), "Due in 3 days");
+  assert.equal(createTranslator("en")("dueSoon.tomorrow"), "Due tomorrow");
+  assert.equal(createTranslator("en")("dueSoon.today"), "Due today");
 });

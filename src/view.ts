@@ -6,6 +6,7 @@ import {
   countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
+  dueSoonDays,
   formatArchiveMonthParts,
   formatCompletedCardDate,
   formatDateSpan,
@@ -371,9 +372,13 @@ export class DayspannView extends ItemView {
   private renderCard(list: HTMLElement, item: CountedRecord): void {
     const { record, difference } = item;
     const card = list.createDiv("dayspann-card");
-    if (difference !== null && difference >= 1 && difference <= this.plugin.settings.soonDays) {
-	card.addClass("dayspann-card--soon");
-    }	
+    // 完了していない記録で、期日が今日から設定の日数後までなら「期日が近い」としてオレンジ色にする。
+    const dueSoon = record.archived || record.completed
+      ? null
+      : dueSoonDays(record.date, this.plugin.todayKey(), this.plugin.settings.soonDays);
+    if (dueSoon !== null) {
+      card.addClass("dayspann-card--soon");
+    }
     if (record.archived) {
       card.addClass("dayspann-card--done");
     }
@@ -444,6 +449,18 @@ export class DayspannView extends ItemView {
     // 日数とボタンを同じ行に並べて、カードの高さを抑える。
     const countRow = card.createDiv("dayspann-count-row");
     const count = countRow.createDiv("dayspann-count");
+    // 期日が近いカードは、日数の前に時計の印を出す。
+    if (dueSoon !== null) {
+      const icon = count.createSpan("dayspann-count-soon-icon");
+      setIcon(icon, "clock");
+      const tooltip = dueSoon === 0
+        ? this.plugin.t("dueSoon.today")
+        : dueSoon === 1
+          ? this.plugin.t("dueSoon.tomorrow")
+          : this.plugin.t("dueSoon.tooltip", { days: dueSoon });
+      setTooltip(count, tooltip);
+      icon.setAttribute("aria-label", tooltip);
+    }
     if (record.archived) {
       const completedDate = record.completed
         ? formatCompletedCardDate(record.completed, this.plugin.todayKey(), this.plugin.locale())

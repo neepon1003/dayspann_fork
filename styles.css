@@ -406,6 +406,18 @@
   font-weight: 600;
 }
 
+/* 期日が近いカードの時計の印。日数の前に小さく出す（色は日数と同じオレンジ）。 */
+.dayspann-count-soon-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.dayspann-count-soon-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* 日数とボタンを同じ行に並べる。入りきらないときはボタンだけ次の行に回る。 */
 .dayspann-count-row {
   display: flex;

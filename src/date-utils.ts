@@ -340,3 +340,14 @@ export function postponeTargets(todayKey: string): PostponeTargets {
     pickDefault: inOneWeek,
   };
 }
+
+/**
+ * 期日（dateKey）まで、今日（todayKey）からあと何日か。
+ * 今日から設定の日数（thresholdDays）後まで（両端を含む）ならその日数を返す（今日が期日なら 0）。
+ * 期日を過ぎている、期日がない、まだ先、または設定が 0（オフ）のときは null。
+ */
+export function dueSoonDays(dateKey: string, todayKey: string, thresholdDays: number): number | null {
+  if (thresholdDays <= 0 || !parseDateKey(dateKey) || !parseDateKey(todayKey)) return null;
+  const days = differenceInCalendarDays(dateKey, todayKey);
+  return days >= 0 && days <= thresholdDays ? days : null;
+}
