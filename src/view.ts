@@ -3,11 +3,15 @@ import type DayspannPlugin from "../main";
 import { planCardActions } from "./card-actions";
 import {
   compareArchiveOrder,
+  countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
-  formatCompletedBadgeDate,
+  formatArchiveMonthParts,
+  formatCompletedCardDate,
   formatDateSpan,
   formatLocalizedDate,
+  groupByMonth,
+  monthKey,
   postponeTargets,
   stalledDays,
 } from "./date-utils";
@@ -113,6 +117,15 @@ export class DayspannView extends ItemView {
       text: this.plugin.t("view.overdueCount", { count: overdueCount }),
     });
     if (overdueCount > 0) overdue.addClass("dayspann-summary-overdue--alert");
+    const doneThisMonth = countThisMonth(
+      counted.filter((item) => item.record.archived).map((item) => item.record.completed),
+      today
+    );
+    const done = summary.createSpan({
+      cls: "dayspann-summary-done",
+      text: this.plugin.t("view.doneThisMonth", { count: doneThisMonth }),
+    });
+    if (doneThisMonth > 0) done.addClass("dayspann-summary-done--ok");
 
     if (!counted.length) {
       const empty = root.createDiv("dayspann-empty");
@@ -176,13 +189,118 @@ export class DayspannView extends ItemView {
       undated
     );
 
-    this.renderSection(
-      root,
-      "archive",
-      this.plugin.t("section.archive"),
-      "archive",
-      archived
-    );
+    this.renderArchiveSection(root, archived, today);
+  }
+
+  /** アーカイブを完了月ごとに分けて出す。今月のグループは開いておき、古い月はたたんでおく。 */
+  private renderArchiveSection(root: HTMLElement, items: CountedRecord[], todayKey: string): void {
+    if (!items.length) return;
+    const section = root.createEl("section", {
+      cls: "dayspann-section dayspann-section--archive",
+    });
+    const title = this.plugin.t("section.archive");
+    const collapsed = this.plugin.settings.archiveCollapsed;
+    section.toggleClass("dayspann-section--collapsed", collapsed);
+
+    const listId = `dayspann-list-${this.viewId}-archive`;
+    const heading = section.createEl("button", {
+      cls: "dayspann-section-heading",
+      attr: {
+        type: "button",
+        "aria-expanded": String(!collapsed),
+        "aria-controls": listId,
+        "aria-label": this.plugin.t(
+          collapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        ),
+      },
+    });
+    setIcon(heading.createSpan("dayspann-section-icon"), "archive");
+    heading.createSpan({
+      text: this.plugin.t("section.heading", { title, count: items.length }),
+    });
+    heading.createSpan("dayspann-section-line");
+    setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
+
+    const list = section.createDiv({ cls: "dayspann-list", attr: { id: listId } });
+    list.hidden = collapsed;
+
+    const currentMonth = monthKey(todayKey) ?? "";
+    const groups = groupByMonth(items, (item) => item.record.completed);
+    for (const group of groups) {
+      this.renderArchiveMonth(list, group.monthKey, group.items, currentMonth);
+    }
+
+    heading.addEventListener("click", () => {
+      const nextCollapsed = !section.hasClass("dayspann-section--collapsed");
+      section.toggleClass("dayspann-section--collapsed", nextCollapsed);
+      list.hidden = nextCollapsed;
+      heading.setAttribute("aria-expanded", String(!nextCollapsed));
+      heading.setAttribute(
+        "aria-label",
+        this.plugin.t(
+          nextCollapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        )
+      );
+      void this.plugin.setArchiveCollapsed(nextCollapsed);
+    });
+  }
+
+  private renderArchiveMonth(
+    list: HTMLElement,
+    groupKey: string,
+    items: CountedRecord[],
+    currentMonth: string
+  ): void {
+    const parts = formatArchiveMonthParts(groupKey, this.plugin.locale());
+    const title = parts
+      ? this.plugin.t("section.archiveMonth", {
+          year: parts.year,
+          month: parts.month,
+          monthName: parts.monthName,
+          count: items.length,
+        })
+      : this.plugin.t("section.archiveMonthUnknown", { count: items.length });
+    const monthCollapsed = Boolean(groupKey) && groupKey !== currentMonth;
+    const month = list.createDiv("dayspann-month");
+    month.toggleClass("dayspann-month--collapsed", monthCollapsed);
+
+    const monthListId = `dayspann-month-${this.viewId}-${groupKey || "unknown"}`;
+    const heading = month.createEl("button", {
+      cls: "dayspann-month-heading",
+      attr: {
+        type: "button",
+        "aria-expanded": String(!monthCollapsed),
+        "aria-controls": monthListId,
+        "aria-label": this.plugin.t(
+          monthCollapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        ),
+      },
+    });
+    heading.createSpan({ text: title });
+    heading.createSpan("dayspann-section-line");
+    setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
+
+    const monthList = month.createDiv({ cls: "dayspann-list", attr: { id: monthListId } });
+    monthList.hidden = monthCollapsed;
+    for (const item of items) this.renderCard(monthList, item);
+
+    heading.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const nextCollapsed = !month.hasClass("dayspann-month--collapsed");
+      month.toggleClass("dayspann-month--collapsed", nextCollapsed);
+      monthList.hidden = nextCollapsed;
+      heading.setAttribute("aria-expanded", String(!nextCollapsed));
+      heading.setAttribute(
+        "aria-label",
+        this.plugin.t(
+          nextCollapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        )
+      );
+    });
   }
 
   private renderSection(
@@ -317,7 +435,7 @@ export class DayspannView extends ItemView {
     const count = countRow.createDiv("dayspann-count");
     if (record.archived) {
       const completedDate = record.completed
-        ? formatCompletedBadgeDate(record.completed, this.plugin.todayKey())
+        ? formatCompletedCardDate(record.completed, this.plugin.todayKey(), this.plugin.locale())
         : "";
       count.createSpan({
         text: completedDate

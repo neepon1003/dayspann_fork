@@ -30,7 +30,7 @@ import {
   TranslationVariables,
 } from "./src/i18n";
 import { DuplicateCandidate, findDuplicates } from "./src/duplicate-check";
-import { appendLogLineToFile } from "./src/log-entry";
+import { appendLogLineToFile, resolveCompletedDate } from "./src/log-entry";
 import { confirmDuplicate, confirmGoalComplete, DayspannEntryModal } from "./src/modals";
 import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
 import {
@@ -447,7 +447,16 @@ export default class DayspannPlugin extends Plugin {
     this.collectMarkdownFiles(root, files);
 
     const parsed = await Promise.all(
-      files.map(async (file) => parseRecord(file, await this.app.vault.cachedRead(file)))
+      files.map(async (file) => {
+        const content = await this.app.vault.cachedRead(file);
+        const record = parseRecord(file, content);
+        if (!record) return null;
+        // アーカイブ済みで完了日がなければ、ログの完了行、なければファイルの更新日から補う（ファイルには書かない）。
+        if (record.archived) {
+          record.completed = resolveCompletedDate(record.completed, content, file.stat.mtime);
+        }
+        return record;
+      })
     );
     return parsed.filter((record): record is DayspannRecord => record !== null);
   }

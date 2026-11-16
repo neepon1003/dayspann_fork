@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   compareArchiveOrder,
+  countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
+  formatArchiveMonthParts,
   formatCompletedBadgeDate,
+  formatCompletedCardDate,
   formatDateSpan,
   formatLocalizedDate,
+  groupByMonth,
+  monthKey,
   normalizeDisplayMode,
   parseDateKey,
+  parseMonthKey,
   readDateKey,
   addMonthsClamped,
   postponeTargets,
@@ -30,7 +36,7 @@ import {
 import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import { findDuplicates, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
-import { appendLogLine, appendLogLineToFile } from "../src/log-entry";
+import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import {
   buildNewNoteBody,
   buildNewNoteTitle,
@@ -666,4 +672,65 @@ test("延期の候補日は今日から数え、期日超過のカードには�
   assert.equal(createTranslator("en")("action.postponeInWeek"), "In 1 week");
   assert.equal(createTranslator("ja")("postponePick.confirm"), "決定");
   assert.equal(createTranslator("en")("error.dateBeforeToday"), "Dates before today cannot be chosen.");
+});
+
+test("完了日を月ごとにまとめ、今月の件数を数える", () => {
+  assert.equal(monthKey("2026-11-16"), "2026-11");
+  assert.equal(monthKey("2026-01-01"), "2026-01");
+  assert.equal(monthKey("bad"), null);
+  assert.deepEqual(parseMonthKey("2026-11"), { year: 2026, month: 11 });
+  assert.equal(parseMonthKey("2026-13"), null);
+
+  assert.equal(
+    countThisMonth(["2026-11-01", "2026-11-30", "2026-10-31", undefined, "bad"], "2026-11-16"),
+    2
+  );
+  assert.equal(countThisMonth([], "2026-11-16"), 0);
+
+  const grouped = groupByMonth(
+    [
+      { name: "a", completed: "2026-11-16" },
+      { name: "b", completed: "2026-10-02" },
+      { name: "c", completed: "2026-11-01" },
+      { name: "d", completed: undefined },
+    ],
+    (item) => item.completed
+  );
+  assert.deepEqual(
+    grouped.map((group) => [group.monthKey, group.items.map((item) => item.name)]),
+    [
+      ["2026-11", ["a", "c"]],
+      ["2026-10", ["b"]],
+      ["", ["d"]],
+    ]
+  );
+
+  assert.equal(formatArchiveMonthParts("2026-11", "en")?.monthName, "November");
+  assert.equal(createTranslator("ja")("view.doneThisMonth", { count: 3 }), "今月完了：3件");
+  assert.equal(createTranslator("en")("view.doneThisMonth", { count: 3 }), "Done this month: 3");
+  assert.equal(createTranslator("ja")("section.archiveMonth", { year: 2026, month: 11, count: 2 }), "2026年11月（2）");
+  assert.equal(createTranslator("en")("section.archiveMonth", { year: 2026, monthName: "November", count: 2 }), "November 2026 (2)");
+});
+
+test("アーカイブのカードの完了日は「完了 11月16日」の形にする", () => {
+  assert.equal(formatCompletedCardDate("2026-11-16", "2026-11-16", "ja"), "11月16日");
+  assert.equal(formatCompletedCardDate("2025-12-01", "2026-11-16", "ja"), "2025年12月1日");
+  assert.equal(formatCompletedCardDate("2026-11-16", "2026-11-16", "en"), "November 16");
+  assert.equal(formatCompletedCardDate("2025-12-01", "2026-11-16", "en"), "December 1, 2025");
+  assert.equal(formatCompletedCardDate("bad", "2026-11-16", "ja"), "");
+  assert.equal(createTranslator("ja")("view.doneOn", { date: "11月16日" }), "完了 11月16日");
+  assert.equal(createTranslator("en")("view.doneOn", { date: "November 16" }), "Done November 16");
+});
+
+test("完了日は frontmatter、なければログの完了行、それもなければ更新日から決める", () => {
+  const note = "---\ntitle: テスト\narchived: true\n---\n\n## 概要\n\n## ログ\n- 2026-10-01 開始\n- 2026-10-20 完了\n\n## 振り返り\n- 2026-12-01 完了\n";
+  assert.equal(readLatestCompletionLogDate(note), "2026-10-20");
+  assert.equal(resolveCompletedDate("2026-11-16", note, Date.UTC(2026, 0, 1)), "2026-11-16");
+  assert.equal(resolveCompletedDate(undefined, note, Date.UTC(2026, 0, 1)), "2026-10-20");
+
+  const noLog = "---\ntitle: テスト\narchived: true\n---\n\n本文だけ\n";
+  assert.equal(readLatestCompletionLogDate(noLog), undefined);
+  const mtime = new Date(2026, 8, 5, 23, 30).getTime();
+  assert.equal(resolveCompletedDate(undefined, noLog, mtime), "2026-09-05");
+  assert.equal(resolveCompletedDate("bad", noLog, mtime), "2026-09-05");
 });

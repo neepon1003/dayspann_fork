@@ -225,6 +225,93 @@ export function stalledDays(mtimeMs: number, now: Date, thresholdDays: number): 
   return days >= thresholdDays ? days : null;
 }
 
+/** YYYY-MM-DD から「年-月」（YYYY-MM）を取り出す。形式が違えば null。 */
+export function monthKey(dateKey: string): string | null {
+  const date = parseDateKey(dateKey);
+  if (!date) return null;
+  return `${String(date.year).padStart(4, "0")}-${String(date.month).padStart(2, "0")}`;
+}
+
+/** 今月（todayKey の月）に完了した件数。 */
+export function countThisMonth(completedDates: Array<string | undefined>, todayKey: string): number {
+  const current = monthKey(todayKey);
+  if (!current) return 0;
+  let count = 0;
+  for (const value of completedDates) {
+    if (value && monthKey(value) === current) count += 1;
+  }
+  return count;
+}
+
+export interface MonthGroup<T> {
+  monthKey: string;
+  items: T[];
+}
+
+/**
+ * 完了月ごとにまとめる。新しい月が先。完了日がないものは最後の空キーのグループへ。
+ * 同じ月の中の順番は、渡された並びのまま。
+ */
+export function groupByMonth<T>(items: T[], completedOf: (item: T) => string | undefined): MonthGroup<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = monthKey(completedOf(item) ?? "") ?? "";
+    const list = groups.get(key);
+    if (list) list.push(item);
+    else groups.set(key, [item]);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (!a) return 1;
+    if (!b) return -1;
+    return b.localeCompare(a);
+  });
+  return keys.map((key) => ({ monthKey: key, items: groups.get(key) ?? [] }));
+}
+
+/** アーカイブのカードに出す完了日。今年なら「11月16日」、別の年なら「2025年12月1日」（英語は November 16）。 */
+export function formatCompletedCardDate(dateKey: string, todayKey: string, locale: "ja" | "en"): string {
+  const completed = parseDateKey(dateKey);
+  const today = parseDateKey(todayKey);
+  if (!completed || !today) return "";
+  const date = new Date(Date.UTC(completed.year, completed.month - 1, completed.day, 12));
+  if (locale === "ja") {
+    return completed.year === today.year
+      ? `${completed.month}月${completed.day}日`
+      : `${completed.year}年${completed.month}月${completed.day}日`;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    year: completed.year === today.year ? undefined : "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+/** YYYY-MM を年と月に分ける。 */
+export function parseMonthKey(value: string): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return { year, month };
+}
+
+/** アーカイブの月見出し用。英語の月名（November）も返す。 */
+export function formatArchiveMonthParts(
+  value: string,
+  locale: "ja" | "en"
+): { year: number; month: number; monthName: string } | null {
+  const parsed = parseMonthKey(value);
+  if (!parsed) return null;
+  const date = new Date(Date.UTC(parsed.year, parsed.month - 1, 1, 12));
+  const monthName = new Intl.DateTimeFormat(locale === "ja" ? "ja-JP" : "en-US", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(date);
+  return { ...parsed, monthName };
+}
+
 /** YYYY-MM-DD の日付を months か月進める（マイナスなら前へ）。同じ日がなければ、その月の末日にする。 */
 export function addMonthsClamped(dateKey: string, months: number): string {
   const date = parseDateKey(dateKey);

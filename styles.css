@@ -71,6 +71,11 @@
   color: var(--dayspann-past-color);
 }
 
+/* 今月完了は、落ち着いた緑色（期日までの色）で出す。 */
+.dayspann-summary-done--ok {
+  color: var(--dayspann-future-color);
+}
+
 .dayspann-header-actions {
   position: absolute;
   top: 0;
@@ -159,8 +164,59 @@
   margin-bottom: 0;
 }
 
-.dayspann-section--collapsed .dayspann-section-chevron {
+.dayspann-section--collapsed .dayspann-section-chevron,
+.dayspann-month--collapsed .dayspann-section-chevron {
   transform: rotate(-90deg);
+}
+
+/* アーカイブの月ごとの見出し。セクションより一段小さくする。 */
+.dayspann-month {
+  margin: 0 0 14px;
+}
+
+.dayspann-month:last-child {
+  margin-bottom: 0;
+}
+
+.dayspann-month-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  margin-bottom: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dayspann-month-heading:hover,
+.dayspann-month-heading:focus-visible {
+  background: transparent;
+  color: var(--text-normal);
+  box-shadow: none;
+}
+
+.dayspann-month-heading:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text-muted) 65%, transparent);
+  outline-offset: 4px;
+}
+
+.dayspann-month--collapsed {
+  margin-bottom: 8px;
+}
+
+.dayspann-month--collapsed .dayspann-month-heading {
+  margin-bottom: 0;
+}
+
+.dayspann-view.dayspann-is-extra-narrow .dayspann-month-heading {
+  font-size: 0.72rem;
 }
 
 .dayspann-list {
