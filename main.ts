@@ -15,6 +15,7 @@ import {
   TFolder,
 } from "obsidian";
 import {
+  differenceInCalendarDays,
   formatLocalizedDate,
   parseDateKey,
   readDateKey,
@@ -330,6 +331,23 @@ export default class DayspannPlugin extends Plugin {
     );
     if (!nextDate) return;
     new Notice(this.t("notice.postponed", { date: formatLocalizedDate(nextDate, this.locale()) }));
+    await this.refreshViews();
+  }
+
+  /** 期日（frontmatter の date）だけを書き換える。今日より前の日付は受け付けない。 */
+  async setRecordDate(record: DayspannRecord, dateKey: string): Promise<void> {
+    if (!parseDateKey(dateKey)) return;
+    if (differenceInCalendarDays(dateKey, this.todayKey()) < 0) {
+      new Notice(this.t("error.dateBeforeToday"));
+      return;
+    }
+    await this.app.fileManager.processFrontMatter(
+      record.file,
+      (frontmatter: Record<string, unknown>) => {
+        frontmatter.date = dateKey;
+      }
+    );
+    new Notice(this.t("notice.postponed", { date: formatLocalizedDate(dateKey, this.locale()) }));
     await this.refreshViews();
   }
 

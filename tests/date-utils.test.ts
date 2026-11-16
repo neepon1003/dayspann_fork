@@ -10,6 +10,8 @@ import {
   normalizeDisplayMode,
   parseDateKey,
   readDateKey,
+  addMonthsClamped,
+  postponeTargets,
   shiftDateKey,
   stalledDays,
   toDateKey,
@@ -355,6 +357,7 @@ test("TaskChuteのカードは「今日やる」を出し、今日の一覧に�
     today: "add",
     complete: true,
     postponeInMenu: true,
+    overdueActions: false,
   });
   assert.equal(planCardActions({ ...record, taskchute: {} }, "2026-11-14").today, "add");
   assert.equal(
@@ -370,6 +373,7 @@ test("TaskChuteでないカードは✓と「…」だけ、期日がなけれ�
     today: "none",
     complete: true,
     postponeInMenu: true,
+    overdueActions: false,
   });
   assert.equal(planCardActions({ archived: false, date: "" }, "2026-11-14").postponeInMenu, false);
 });
@@ -380,7 +384,7 @@ test("アーカイブ済みのカードは「…」だけにする", () => {
       { archived: true, completed: "2026-11-13", date: "2026-11-30", taskchute: { targetDate: "2026-11-14" } },
       "2026-11-14"
     ),
-    { today: "none", complete: false, postponeInMenu: false }
+    { today: "none", complete: false, postponeInMenu: false, overdueActions: false }
   );
 });
 
@@ -618,4 +622,48 @@ test("更新から設定の日数以上たっているときだけ、止まっ�
 
   assert.equal(createTranslator("ja")("stalled.tooltip", { days: 3 }), "3日より前から更新されていません");
   assert.equal(createTranslator("en")("stalled.tooltip", { days: 3 }), "Not updated for more than 3 days");
+});
+
+test("1か月後は同じ日の翌月で、その日がなければ月末にする", () => {
+  assert.equal(addMonthsClamped("2026-11-16", 1), "2026-12-16");
+  assert.equal(addMonthsClamped("2026-12-16", 1), "2027-01-16");
+  assert.equal(addMonthsClamped("2026-01-31", 1), "2026-02-28");
+  assert.equal(addMonthsClamped("2024-01-31", 1), "2024-02-29");
+  assert.equal(addMonthsClamped("2026-03-31", 1), "2026-04-30");
+  assert.equal(addMonthsClamped("2026-05-31", -1), "2026-04-30");
+  assert.throws(() => addMonthsClamped("2026-02-30", 1));
+});
+
+test("延期の候補日は今日から数え、期日超過のカードには「延期する」と「完了する」を出す", () => {
+  assert.deepEqual(postponeTargets("2026-11-16"), {
+    tomorrow: "2026-11-17",
+    inOneWeek: "2026-11-23",
+    inOneMonth: "2026-12-16",
+    pickDefault: "2026-11-23",
+  });
+  assert.equal(postponeTargets("2026-01-31").inOneMonth, "2026-02-28");
+  assert.equal(postponeTargets("2024-01-31").inOneMonth, "2024-02-29");
+
+  assert.deepEqual(planCardActions({ archived: false, date: "2026-11-10" }, "2026-11-16"), {
+    today: "none",
+    complete: false,
+    postponeInMenu: true,
+    overdueActions: true,
+  });
+  assert.deepEqual(
+    planCardActions(
+      { archived: false, date: "2026-11-10", taskchute: { targetDate: "2026-11-16" } },
+      "2026-11-16"
+    ),
+    { today: "inToday", complete: false, postponeInMenu: true, overdueActions: true }
+  );
+  assert.equal(planCardActions({ archived: false, date: "2026-11-16" }, "2026-11-16").overdueActions, false);
+  assert.equal(planCardActions({ archived: false, date: "" }, "2026-11-16").overdueActions, false);
+
+  assert.equal(createTranslator("ja")("action.postpone"), "延期する");
+  assert.equal(createTranslator("ja")("action.completeOverdue"), "完了する");
+  assert.equal(createTranslator("ja")("action.postponeTomorrow"), "明日");
+  assert.equal(createTranslator("en")("action.postponeInWeek"), "In 1 week");
+  assert.equal(createTranslator("ja")("postponePick.confirm"), "決定");
+  assert.equal(createTranslator("en")("error.dateBeforeToday"), "Dates before today cannot be chosen.");
 });

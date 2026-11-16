@@ -8,9 +8,11 @@ import {
   formatCompletedBadgeDate,
   formatDateSpan,
   formatLocalizedDate,
+  postponeTargets,
   stalledDays,
 } from "./date-utils";
 import { durationUnit } from "./i18n";
+import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard } from "./note-template";
 import { DayspannSectionKind } from "./settings";
@@ -361,6 +363,14 @@ export class DayspannView extends ItemView {
     const plan = planCardActions(record, this.plugin.todayKey());
     const actions = countRow.createDiv("dayspann-card-actions");
     if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
+    if (plan.overdueActions) {
+      this.textButton(actions, "calendar-clock", this.plugin.t("action.postpone"), (event) => {
+        this.openPostponeMenu(event, record);
+      });
+      this.textButton(actions, "check", this.plugin.t("action.completeOverdue"), () => {
+        void this.plugin.setRecordArchived(record, true);
+      });
+    }
     if (plan.complete) {
       this.iconButton(actions, "check", this.plugin.t("action.complete"), () => {
         void this.plugin.setRecordArchived(record, true);
@@ -395,6 +405,46 @@ export class DayspannView extends ItemView {
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
+  }
+
+  /** 期日超過の「延期する」。今日から、明日・1週間後・1か月後・日付を選ぶ、を出す。 */
+  private openPostponeMenu(event: MouseEvent, record: DayspannRecord): void {
+    const today = this.plugin.todayKey();
+    const targets = postponeTargets(today);
+    const menu = new Menu();
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponeTomorrow"))
+        .setIcon("sun")
+        .onClick(() => void this.plugin.setRecordDate(record, targets.tomorrow))
+    );
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponeInWeek"))
+        .setIcon("calendar-plus")
+        .onClick(() => void this.plugin.setRecordDate(record, targets.inOneWeek))
+    );
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponeInMonth"))
+        .setIcon("calendar-clock")
+        .onClick(() => void this.plugin.setRecordDate(record, targets.inOneMonth))
+    );
+    menu.addSeparator();
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponePick"))
+        .setIcon("calendar")
+        .onClick(() => void this.pickPostponeDate(record, today, targets.pickDefault))
+    );
+    menu.showAtMouseEvent(event);
+  }
+
+  private async pickPostponeDate(record: DayspannRecord, todayKey: string, defaultDateKey: string): Promise<void> {
+    const picked = await choosePostponeDate(this.app, defaultDateKey, todayKey, (key, variables) =>
+      this.plugin.t(key, variables)
+    );
+    if (picked) await this.plugin.setRecordDate(record, picked);
   }
 
   private addArchiveMenuItem(menu: Menu, record: DayspannRecord): void {
@@ -438,6 +488,27 @@ export class DayspannView extends ItemView {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       onClick();
+    });
+    return button;
+  }
+
+  /** 期日超過の「延期する」「完了する」。アイコンと短い文字を出す。 */
+  private textButton(
+    parent: HTMLElement,
+    icon: string,
+    label: string,
+    onClick: (event: MouseEvent) => void
+  ): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: "dayspann-text-button",
+      attr: { type: "button", "aria-label": label },
+    });
+    setIcon(button.createSpan("dayspann-text-button-icon"), icon);
+    button.createSpan({ text: label, cls: "dayspann-text-button-label" });
+    setTooltip(button, label);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onClick(event);
     });
     return button;
   }

@@ -3,11 +3,13 @@ import {
   ExtraButtonComponent,
   FuzzySuggestModal,
   Modal,
+  Notice,
   Setting,
   TFile,
 } from "obsidian";
 import {
   DEFAULT_DISPLAY_MODE,
+  differenceInCalendarDays,
   normalizeDisplayMode,
   parseDateKey,
 } from "./date-utils";
@@ -114,6 +116,89 @@ class GoalCompleteModal extends Modal {
   private answer(complete: boolean): void {
     this.answered = true;
     this.resolve(complete);
+    this.close();
+  }
+}
+
+/**
+ * 延期する日付を選ぶ。「決定」なら YYYY-MM-DD、「やめる」や閉じたときは null。
+ * 今日より前の日付は受け付けず、案内を出して画面を開いたままにする。
+ */
+export function choosePostponeDate(
+  app: App,
+  defaultDateKey: string,
+  todayKey: string,
+  t: Translator
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    new PostponeDateModal(app, defaultDateKey, todayKey, t, resolve).open();
+  });
+}
+
+class PostponeDateModal extends Modal {
+  private answered = false;
+  private inputEl?: HTMLInputElement;
+
+  constructor(
+    app: App,
+    private defaultDateKey: string,
+    private todayKey: string,
+    private t: Translator,
+    private resolve: (dateKey: string | null) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.t("postponePick.title"));
+
+    const field = contentEl.createDiv("dayspann-modal-field");
+    const input = field.createEl("input", {
+      type: "date",
+      cls: "dayspann-postpone-date",
+      attr: { type: "date", min: this.todayKey },
+    });
+    input.value = this.defaultDateKey;
+    this.inputEl = input;
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.submit();
+      }
+    });
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const cancel = actions.createEl("button", { text: this.t("postponePick.cancel") });
+    cancel.addEventListener("click", () => this.answer(null));
+    const confirm = actions.createEl("button", { text: this.t("postponePick.confirm"), cls: "mod-cta" });
+    confirm.addEventListener("click", () => this.submit());
+    window.setTimeout(() => input.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // ×ボタンや Esc で閉じたときは「やめる」と同じにする。
+    if (!this.answered) this.resolve(null);
+  }
+
+  private submit(): void {
+    const value = this.inputEl?.value.trim() ?? "";
+    if (!parseDateKey(value)) {
+      new Notice(this.t("error.dateInvalid"));
+      return;
+    }
+    if (differenceInCalendarDays(value, this.todayKey) < 0) {
+      new Notice(this.t("error.dateBeforeToday"));
+      return;
+    }
+    this.answer(value);
+  }
+
+  private answer(dateKey: string | null): void {
+    this.answered = true;
+    this.resolve(dateKey);
     this.close();
   }
 }

@@ -332,9 +332,11 @@
 
 .dayspann-card-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
   margin-left: auto;
 }
 
@@ -350,6 +352,40 @@
 
 .dayspann-card-actions .dayspann-icon-button:hover {
   color: var(--text-normal);
+}
+
+/* 期日超過の「延期する」「完了する」。アイコンボタンに近い色で、短い文字を添える。 */
+.dayspann-card-actions .dayspann-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 15px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dayspann-card-actions .dayspann-text-button:hover {
+  color: var(--text-normal);
+}
+
+.dayspann-text-button-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.dayspann-text-button-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.dayspann-postpone-date {
+  width: 100%;
+  margin: 8px 0 4px;
 }
 
 /* しばらく更新していないカードの印。目立たせず、日数の横にアイコンだけ出す。 */
@@ -708,4 +744,17 @@
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card-actions {
   gap: 2px;
+}
+
+/* とても狭いときは文字を隠してアイコンだけにし、行からはみ出さないようにする。 */
+.dayspann-view.dayspann-is-extra-narrow .dayspann-text-button-label {
+  display: none;
+}
+
+.dayspann-view.dayspann-is-extra-narrow .dayspann-card-actions .dayspann-text-button {
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
 }

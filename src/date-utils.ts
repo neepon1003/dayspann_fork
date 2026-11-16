@@ -170,17 +170,17 @@ function completedMonthsAndDays(
   end: CalendarDate
 ): { months: number; days: number } {
   let months = (end.year - start.year) * 12 + (end.month - start.month);
-  let anchor = addMonthsClamped(start, months);
+  let anchor = shiftCalendarDateByMonths(start, months);
 
   if (compareCalendarDates(anchor, end) > 0) {
     months -= 1;
-    anchor = addMonthsClamped(start, months);
+    anchor = shiftCalendarDateByMonths(start, months);
   }
 
   return { months, days: calendarDayDifference(anchor, end) };
 }
 
-function addMonthsClamped(date: CalendarDate, months: number): CalendarDate {
+function shiftCalendarDateByMonths(date: CalendarDate, months: number): CalendarDate {
   const zeroBasedMonth = date.month - 1 + months;
   const year = date.year + Math.floor(zeroBasedMonth / 12);
   const month = ((zeroBasedMonth % 12) + 12) % 12 + 1;
@@ -223,4 +223,33 @@ export function stalledDays(mtimeMs: number, now: Date, thresholdDays: number): 
   if (thresholdDays <= 0) return null;
   const days = differenceInCalendarDays(toDateKey(now), toDateKey(new Date(mtimeMs)));
   return days >= thresholdDays ? days : null;
+}
+
+/** YYYY-MM-DD の日付を months か月進める（マイナスなら前へ）。同じ日がなければ、その月の末日にする。 */
+export function addMonthsClamped(dateKey: string, months: number): string {
+  const date = parseDateKey(dateKey);
+  if (!date) throw new Error("日付は YYYY-MM-DD 形式で入力してください");
+  const shifted = shiftCalendarDateByMonths(date, months);
+  const year = String(shifted.year).padStart(4, "0");
+  const month = String(shifted.month).padStart(2, "0");
+  const day = String(shifted.day).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export interface PostponeTargets {
+  tomorrow: string;
+  inOneWeek: string;
+  inOneMonth: string;
+  pickDefault: string;
+}
+
+/** 延期の候補日。どれも「今日」から数える（いまの期日からは数えない）。日付を選ぶ欄の初期値は 1 週間後。 */
+export function postponeTargets(todayKey: string): PostponeTargets {
+  const inOneWeek = shiftDateKey(todayKey, 7);
+  return {
+    tomorrow: shiftDateKey(todayKey, 1),
+    inOneWeek,
+    inOneMonth: addMonthsClamped(todayKey, 1),
+    pickDefault: inOneWeek,
+  };
 }
