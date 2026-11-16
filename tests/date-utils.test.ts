@@ -42,6 +42,7 @@ import {
   buildNewNoteTitle,
   displayTitle,
   excerptForCard,
+  splitTitle,
   NEW_NOTE_TOOLBAR,
 } from "../src/note-template";
 import {
@@ -515,10 +516,11 @@ test("新しいノートのタイトルは「名前｜プロジェクトノー�
   assert.deepEqual(NEW_NOTE_TOOLBAR, ["btn"]);
 });
 
-test("カードには「｜プロジェクトノート作成」を外した名前を出す", () => {
+test("カードには「｜」より前の名前を出す", () => {
   assert.equal(displayTitle("はばタンPAY+｜プロジェクトノート作成"), "はばタンPAY+");
-  assert.equal(displayTitle("はばタンPAY+第6弾｜当選結果を確認する"), "はばタンPAY+第6弾｜当選結果を確認する");
+  assert.equal(displayTitle("はばタンPAY+第6弾｜当選結果を確認する"), "はばタンPAY+第6弾");
   assert.equal(displayTitle("｜プロジェクトノート作成"), "｜プロジェクトノート作成");
+  assert.equal(displayTitle("テスト"), "テスト");
 });
 
 test("新しいノートの本文は「概要」「次の一手」「ログ」で、残しておく文章は「概要」の下に入る", () => {
@@ -733,4 +735,14 @@ test("完了日は frontmatter、なければログの完了行、それもな�
   const mtime = new Date(2026, 8, 5, 23, 30).getTime();
   assert.equal(resolveCompletedDate(undefined, noLog, mtime), "2026-09-05");
   assert.equal(resolveCompletedDate("bad", noLog, mtime), "2026-09-05");
+});
+
+test("タイトルの「｜」より後ろを次の一手として分ける", () => {
+  assert.deepEqual(splitTitle("テスト２｜次のステージへ２"), { name: "テスト２", nextAction: "次のステージへ２" });
+  assert.deepEqual(splitTitle("テスト２"), { name: "テスト２", nextAction: "" });
+  assert.deepEqual(splitTitle("テスト２｜"), { name: "テスト２", nextAction: "" });
+  assert.deepEqual(splitTitle("  テスト２ ｜ 次の一手 ｜ 続き  "), { name: "テスト２", nextAction: "次の一手 ｜ 続き" });
+  assert.deepEqual(splitTitle("｜プロジェクトノート作成"), { name: "", nextAction: "プロジェクトノート作成" });
+  assert.equal(createTranslator("ja")("view.nextAction"), "次の一手");
+  assert.equal(createTranslator("en")("view.nextAction"), "Next action");
 });

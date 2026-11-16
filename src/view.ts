@@ -18,7 +18,7 @@ import {
 import { durationUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
-import { displayTitle, excerptForCard } from "./note-template";
+import { displayTitle, excerptForCard, splitTitle } from "./note-template";
 import { DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
@@ -424,6 +424,17 @@ export class DayspannView extends ItemView {
       setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
       goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
       setTooltip(goal, record.goal);
+    }
+    // 完了していないカードは、タイトルの「｜」より後ろを「次の一手」として出す。
+    const nextAction = record.archived ? "" : splitTitle(record.title).nextAction;
+    if (nextAction) {
+      const next = content.createDiv({ cls: "dayspann-card-next" });
+      const icon = next.createSpan("dayspann-card-next-icon");
+      setIcon(icon, "arrow-right");
+      icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
+      next.createSpan({ text: nextAction, cls: "dayspann-card-next-text" });
+      next.setAttribute("title", nextAction);
+      setTooltip(next, nextAction);
     }
     const excerpt = excerptForCard(record.excerpt);
     if (excerpt) {

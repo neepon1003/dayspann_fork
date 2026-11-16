@@ -18,10 +18,9 @@ export function buildNewNoteTitle(name: string): string {
   return trimmed.endsWith(NEW_NOTE_TITLE_SUFFIX) ? trimmed : `${trimmed}${NEW_NOTE_TITLE_SUFFIX}`;
 }
 
-/** カードに出すタイトル。後ろの「｜プロジェクトノート作成」を外す（外すと空になるときは外さない）。 */
+/** カードに出すタイトル。「｜」より前の名前。名前が空になるときは元のタイトルを出す。 */
 export function displayTitle(title: string): string {
-  if (!title.endsWith(NEW_NOTE_TITLE_SUFFIX)) return title;
-  return title.slice(0, -NEW_NOTE_TITLE_SUFFIX.length).trim() || title;
+  return splitTitle(title).name || title;
 }
 
 /** 新しいノートの本文。「概要」「次の一手」「ログ」の見出しを作り、残しておく文章は「概要」の下に入れる。 */
@@ -42,4 +41,22 @@ export function excerptForCard(body: string): string {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export interface SplitTitle {
+  name: string;
+  nextAction: string;
+}
+
+/**
+ * タイトルを、最初の全角「｜」（U+FF5C）の前（名前）と後ろ（次の一手）に分ける。
+ * 「｜」がなければ次の一手は空。後ろが空なら次の一手は空。2つ目以降の「｜」は次の一手に残す。
+ */
+export function splitTitle(title: string): SplitTitle {
+  const index = title.indexOf("｜");
+  if (index < 0) return { name: title.trim(), nextAction: "" };
+  return {
+    name: title.slice(0, index).trim(),
+    nextAction: title.slice(index + "｜".length).trim(),
+  };
 }
