@@ -25,9 +25,12 @@ import {
 } from "../src/date-utils";
 import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
 import {
+  ALL_HABITS_GROUP_KEY,
+  normalizeCollapsedHabitGroups,
   normalizeCollapsedSections,
   normalizeSectionOrder,
   parseSoonDays,
+  toggleCollapsedKey,
 } from "../src/settings";
 import {
   formatSourceReference,
@@ -952,5 +955,23 @@ test("習慣の分類を読み、名前順の見出しにまとめ、編集で�
   assert.equal(createTranslator("ja")("modal.category"), "分類");
   assert.equal(createTranslator("en")("section.other"), "Other");
   assert.equal(createTranslator("en")("modal.category"), "Category");
+});
+
+test("習慣の見出しの折りたたみ状態はキーのリストで重複なく入れ外しできる", () => {
+  assert.deepEqual(normalizeCollapsedHabitGroups(["読書", "読書", 1, "", ALL_HABITS_GROUP_KEY, null]), [
+    "読書",
+    "",
+    ALL_HABITS_GROUP_KEY,
+  ]);
+  assert.deepEqual(normalizeCollapsedHabitGroups(undefined), []);
+  assert.deepEqual(normalizeCollapsedHabitGroups("読書"), []);
+
+  assert.deepEqual(toggleCollapsedKey([], "読書", true), ["読書"]);
+  assert.deepEqual(toggleCollapsedKey(["読書"], "読書", true), ["読書"]);
+  assert.deepEqual(toggleCollapsedKey(["読書"], "読書", false), []);
+  assert.deepEqual(toggleCollapsedKey(["読書", ""], "運動", true), ["読書", "", "運動"]);
+  assert.deepEqual(toggleCollapsedKey(["読書", ""], "", false), ["読書"]);
+  assert.deepEqual(toggleCollapsedKey([], ALL_HABITS_GROUP_KEY, true), [ALL_HABITS_GROUP_KEY]);
+  assert.deepEqual(toggleCollapsedKey([ALL_HABITS_GROUP_KEY], ALL_HABITS_GROUP_KEY, false), []);
 });
 

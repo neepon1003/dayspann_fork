@@ -47,3 +47,26 @@ export function normalizeSectionOrder(value: unknown): DayspannSectionKind[] {
 
   return normalized;
 }
+
+/** 分類が一つもないときの「習慣」見出しのキー。その他（空文字）とは別に覚える。 */
+export const ALL_HABITS_GROUP_KEY = "*";
+
+/** 折りたたんだ習慣の見出しのキーを整える。文字列だけを、重複なく残す。 */
+export function normalizeCollapsedHabitGroups(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const normalized: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && !normalized.includes(item)) {
+      normalized.push(item);
+    }
+  }
+  return normalized;
+}
+
+/** 折りたたみのキーをリストに入れる、または外す。同じキーは重複させない。 */
+export function toggleCollapsedKey(keys: string[], key: string, collapsed: boolean): string[] {
+  const next = keys.filter((item) => item !== key);
+  if (collapsed) next.push(key);
+  return next;
+}

@@ -31,7 +31,7 @@ import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, splitTitle } from "./note-template";
 import { RECORD_TYPES, RecordType } from "./record-type";
-import { DayspannSectionKind } from "./settings";
+import { ALL_HABITS_GROUP_KEY, DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 
@@ -262,11 +262,11 @@ export class DayspannView extends ItemView {
       const groups = groupHabitsByCategory(active);
       const useCategories = groups.some((group) => group.category);
       if (!useCategories) {
-        this.renderHabitSection(root, this.plugin.t("section.habit"), active, logs);
+        this.renderHabitSection(root, this.plugin.t("section.habit"), ALL_HABITS_GROUP_KEY, active, logs);
       } else {
         for (const group of groups) {
           const title = group.category || this.plugin.t("section.other");
-          this.renderHabitSection(root, title, group.items, logs);
+          this.renderHabitSection(root, title, group.category, group.items, logs);
         }
       }
     }
@@ -280,22 +280,56 @@ export class DayspannView extends ItemView {
     this.renderArchiveSection(root, archived, todayKey);
   }
 
-  /** 習慣の見出しと、その下のカードを出す。 */
+  /** 習慣の見出しと、その下のカードを出す。見出しをクリックすると折りたためる。 */
   private renderHabitSection(
     root: HTMLElement,
     title: string,
+    groupKey: string,
     records: DayspannRecord[],
     logs: HabitLogDays
   ): void {
     const section = root.createEl("section", { cls: "dayspann-section dayspann-section--habit" });
-    const heading = section.createDiv("dayspann-section-heading dayspann-section-heading--static");
+    const collapsed = this.plugin.settings.collapsedHabitGroups.includes(groupKey);
+    section.toggleClass("dayspann-section--collapsed", collapsed);
+
+    const listId = `dayspann-list-${this.viewId}-habit-${encodeURIComponent(groupKey)}`;
+    const heading = section.createEl("button", {
+      cls: "dayspann-section-heading",
+      attr: {
+        type: "button",
+        "aria-expanded": String(!collapsed),
+        "aria-controls": listId,
+        "aria-label": this.plugin.t(
+          collapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        ),
+      },
+    });
     setIcon(heading.createSpan("dayspann-section-icon"), "repeat");
     heading.createSpan({
       text: this.plugin.t("section.heading", { title, count: records.length }),
     });
     heading.createSpan("dayspann-section-line");
-    const list = section.createDiv("dayspann-list");
+    setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
+
+    const list = section.createDiv({ cls: "dayspann-list", attr: { id: listId } });
+    list.hidden = collapsed;
     for (const record of records) this.renderHabitCard(list, record, logs);
+
+    heading.addEventListener("click", () => {
+      const nextCollapsed = !section.hasClass("dayspann-section--collapsed");
+      section.toggleClass("dayspann-section--collapsed", nextCollapsed);
+      list.hidden = nextCollapsed;
+      heading.setAttribute("aria-expanded", String(!nextCollapsed));
+      heading.setAttribute(
+        "aria-label",
+        this.plugin.t(
+          nextCollapsed ? "action.expandSection" : "action.collapseSection",
+          { title }
+        )
+      );
+      void this.plugin.setHabitGroupCollapsed(groupKey, nextCollapsed);
+    });
   }
 
   /** 習慣のカード。名前・最終更新日・止まっている印・ヒートマップ・「…」だけを出す。 */

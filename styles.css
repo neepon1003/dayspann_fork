@@ -891,13 +891,9 @@
   color: var(--text-normal);
 }
 
-/* 習慣のセクション。見出しは押しても何も起きない。 */
+/* 習慣のセクション。見出しをクリックすると折りたためる。 */
 .dayspann-section--habit {
   --dayspann-accent: var(--color-purple, var(--interactive-accent));
-}
-
-.dayspann-section-heading--static {
-  cursor: default;
 }
 
 /* 登録・編集画面で種類が「習慣」のときは、期日・完了条件・表示形式の欄を隠し、分類の欄を出す。 */
