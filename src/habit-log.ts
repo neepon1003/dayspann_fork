@@ -36,8 +36,8 @@ export interface HabitIdentity {
   basename: string;
 }
 
-/** ヒートマップに出す週の数（日曜はじまりの列）。 */
-export const HEATMAP_WEEKS = 12;
+/** ヒートマップに出す週の数（日曜はじまり。上が古く、下が今週）。 */
+export const HEATMAP_WEEKS = 4;
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
@@ -175,30 +175,30 @@ function weekdayOf(dateKey: string): number {
 }
 
 /**
- * ヒートマップの並び。週ごとの列（左が古く、右が今週）で、各列は日曜から土曜の 7 マス。
+ * ヒートマップの並び。週ごとの行（上が古く、下が今週）で、各行は日曜から土曜の 7 マス。
  * 今日より先の日は null。
  */
 export function buildHeatmapWeeks(todayKey: string, weeks = HEATMAP_WEEKS): Array<Array<string | null>> {
   const fromSunday = weekdayOf(todayKey);
   const firstSunday = shiftDateKey(todayKey, -fromSunday - (weeks - 1) * 7);
-  const columns: Array<Array<string | null>> = [];
+  const rows: Array<Array<string | null>> = [];
   for (let week = 0; week < weeks; week += 1) {
-    const column: Array<string | null> = [];
+    const row: Array<string | null> = [];
     for (let day = 0; day < 7; day += 1) {
       const offset = week * 7 + day;
       const dateKey = shiftDateKey(firstSunday, offset);
-      column.push(offset > fromSunday + (weeks - 1) * 7 ? null : dateKey);
+      row.push(offset > fromSunday + (weeks - 1) * 7 ? null : dateKey);
     }
-    columns.push(column);
+    rows.push(row);
   }
-  return columns;
+  return rows;
 }
 
 /** ヒートマップに出す日が入っている月（YYYY-MM）。読むログのファイルを決めるのに使う。 */
 export function heatmapMonthKeys(todayKey: string, weeks = HEATMAP_WEEKS): string[] {
   const months: string[] = [];
-  for (const column of buildHeatmapWeeks(todayKey, weeks)) {
-    for (const dateKey of column) {
+  for (const week of buildHeatmapWeeks(todayKey, weeks)) {
+    for (const dateKey of week) {
       const month = dateKey?.slice(0, 7);
       if (month && !months.includes(month)) months.push(month);
     }

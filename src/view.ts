@@ -346,7 +346,7 @@ export class DayspannView extends ItemView {
     });
   }
 
-  /** 習慣のヒートマップ。直近 12 週を、週ごとの列（日曜はじまり、右が今週）で出し、下に直近 30 日の日数を出す。 */
+  /** 習慣のヒートマップ。直近 4 週を、左から日月火…、上が古く下が今週の行で出し、下に直近 30 日の日数を出す。 */
   private renderHeatmap(parent: HTMLElement, record: DayspannRecord, logs: HabitLogDays, todayKey: string): void {
     const counts = countHabitDays(logs, {
       taskId: record.taskchute?.taskId,
@@ -355,10 +355,14 @@ export class DayspannView extends ItemView {
     });
     const wrap = parent.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
+    const header = grid.createDiv({ cls: "dayspann-heatmap-dow", attr: { "aria-hidden": "true" } });
+    for (const label of this.plugin.t("heatmap.weekdays")) {
+      header.createDiv({ text: label, cls: "dayspann-heatmap-dow-cell" });
+    }
     for (const week of buildHeatmapWeeks(todayKey)) {
-      const column = grid.createDiv("dayspann-heatmap-week");
+      const row = grid.createDiv("dayspann-heatmap-week");
       for (const dateKey of week) {
-        const cell = column.createDiv("dayspann-heatmap-cell");
+        const cell = row.createDiv("dayspann-heatmap-cell");
         if (!dateKey) {
           cell.addClass("dayspann-heatmap-cell--future");
           continue;

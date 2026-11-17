@@ -43,6 +43,7 @@ import {
   buildHeatmapWeeks,
   countActiveDays,
   countHabitDays,
+  HEATMAP_WEEKS,
   heatmapLevel,
   heatmapMonthKeys,
   isLogEntryCompleted,
@@ -875,14 +876,17 @@ test("TaskChute のログを読み、差分を重ねて、習慣ごとに日付�
   assert.equal(createTranslator("ja")("heatmap.recent", { days: 30, count: 12 }), "直近30日：12日");
 });
 
-test("ヒートマップは日曜はじまりの 12 週で、右の列が今週、今日より先は空ける", () => {
+test("ヒートマップは日曜はじまりの 4 週で、左から日月火…、下の行が今週、今日より先は空ける", () => {
   const weeks = buildHeatmapWeeks("2026-11-18");
-  assert.equal(weeks.length, 12);
+  assert.equal(HEATMAP_WEEKS, 4);
+  assert.equal(weeks.length, 4);
   assert.ok(weeks.every((week) => week.length === 7));
-  assert.deepEqual(weeks[11], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", null, null, null]);
-  assert.equal(weeks[0]?.[0], "2026-08-30");
-  assert.deepEqual(buildHeatmapWeeks("2026-11-21")[11], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"]);
-  assert.deepEqual(buildHeatmapWeeks("2026-11-22")[11], ["2026-11-22", null, null, null, null, null, null]);
-  assert.deepEqual(heatmapMonthKeys("2026-11-18"), ["2026-08", "2026-09", "2026-10", "2026-11"]);
+  assert.deepEqual(weeks[3], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", null, null, null]);
+  assert.deepEqual(weeks[0], ["2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31"]);
+  assert.deepEqual(buildHeatmapWeeks("2026-11-21")[3], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"]);
+  assert.deepEqual(buildHeatmapWeeks("2026-11-22")[3], ["2026-11-22", null, null, null, null, null, null]);
+  assert.deepEqual(heatmapMonthKeys("2026-11-18"), ["2026-10", "2026-11"]);
+  assert.equal(createTranslator("ja")("heatmap.weekdays"), "日月火水木金土");
+  assert.equal(createTranslator("en")("heatmap.weekdays"), "SMTWTFS");
 });
 
