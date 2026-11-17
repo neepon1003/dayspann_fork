@@ -40,7 +40,15 @@ import {
 } from "./src/modals";
 import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
 import { DEFAULT_RECORD_TYPE, normalizeRecordType, RecordType } from "./src/record-type";
-import { HabitLogDays, HabitLogDelta, mergeHabitLogs, parseDeltaLines, parseMonthlyLog } from "./src/habit-log";
+import {
+  collectLogMonthKeys,
+  HabitLogDays,
+  HabitLogDelta,
+  heatmapMonthKeys,
+  mergeHabitLogs,
+  parseDeltaLines,
+  parseMonthlyLog,
+} from "./src/habit-log";
 import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
@@ -481,6 +489,45 @@ export default class DayspannPlugin extends Plugin {
       })
     );
     return parsed.filter((record): record is DayspannRecord => record !== null);
+  }
+
+  /**
+   * ログフォルダにある月ごとのファイル（YYYY-MM-tasks.json と inbox の YYYY-MM.jsonl）から月を集める。
+   * ヒートマップに必要な月（直近 4 週）も必ず含める。最長の連続を出すために、ある月のファイルはすべて読む。
+   */
+  async listTaskChuteLogMonths(todayKey: string): Promise<string[]> {
+    const adapter = this.app.vault.adapter;
+    const base = getTaskChuteLogFolder(this.app as unknown as TaskChuteHost);
+    const paths: string[] = [];
+    const listFiles = async (folder: string): Promise<string[]> => {
+      try {
+        const normalized = normalizePath(folder);
+        return (await adapter.exists(normalized)) ? (await adapter.list(normalized)).files : [];
+      } catch {
+        return [];
+      }
+    };
+
+    paths.push(...(await listFiles(base)));
+    for (const inbox of [`${base}/inbox`, `${base}/.inbox`]) {
+      let devices: string[] = [];
+      try {
+        const normalized = normalizePath(inbox);
+        if (await adapter.exists(normalized)) devices = (await adapter.list(normalized)).folders;
+      } catch {
+        devices = [];
+      }
+      for (const device of devices) {
+        paths.push(...(await listFiles(device)));
+      }
+    }
+
+    const months = collectLogMonthKeys(paths);
+    for (const month of heatmapMonthKeys(todayKey)) {
+      if (!months.includes(month)) months.push(month);
+    }
+    months.sort();
+    return months;
   }
 
   /**

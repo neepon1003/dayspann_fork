@@ -219,3 +219,103 @@ export function countActiveDays(counts: Record<string, number>, todayKey: string
   }
   return active;
 }
+
+/** 連続の数え方。daily は日、それ以外（未設定・毎週・毎月など）は週。 */
+export type StreakUnit = "day" | "week";
+
+/** いまの連続と、これまでの最長。 */
+export interface StreakResult {
+  current: number;
+  longest: number;
+}
+
+/**
+ * TaskChute の routine_type を見て、連続を日で数えるか週で数えるかを決める。
+ * daily（大文字小文字は問わない）のときだけ日。weekly / monthly / monthly_date / weekdays / weekends / 未設定などは週。
+ */
+export function readStreakUnit(value: unknown): StreakUnit {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return raw === "daily" ? "day" : "week";
+}
+
+function hasCount(counts: Record<string, number>, dateKey: string): boolean {
+  return (counts[dateKey] ?? 0) > 0;
+}
+
+/** YYYY-MM-DD が属する、日曜はじまりの週の日曜。 */
+export function sundayOfDateKey(dateKey: string): string {
+  const date = parseDateKey(dateKey);
+  if (!date) throw new Error("日付は YYYY-MM-DD 形式で入力してください");
+  const weekday = new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+  return shiftDateKey(dateKey, -weekday);
+}
+
+function longestRun(keys: string[], stepDays: number): number {
+  const ordered = [...keys].sort();
+  let longest = 0;
+  let run = 0;
+  let previous: string | null = null;
+  for (const key of ordered) {
+    run = previous && shiftDateKey(previous, stepDays) === key ? run + 1 : 1;
+    if (run > longest) longest = run;
+    previous = key;
+  }
+  return longest;
+}
+
+function currentRun(startKey: string, hasKey: (key: string) => boolean, stepDays: number): number {
+  let current = 0;
+  let cursor = startKey;
+  while (hasKey(cursor)) {
+    current += 1;
+    cursor = shiftDateKey(cursor, -stepDays);
+  }
+  return current;
+}
+
+/**
+ * 日ごとの連続。1 回以上やった日を数える。
+ * 今日がまだ空なら、昨日までの連続を出す（今日も昨日も空なら 0）。
+ * 最長は、読み込んだログにある日のうち、いちばん長く続いた日数。
+ */
+export function streakDays(counts: Record<string, number>, todayKey: string): StreakResult {
+  const start = hasCount(counts, todayKey) ? todayKey : shiftDateKey(todayKey, -1);
+  const current = currentRun(start, (key) => hasCount(counts, key), 1);
+  const dates = Object.keys(counts).filter((key) => parseDateKey(key) && hasCount(counts, key) && key <= todayKey);
+  return { current, longest: Math.max(current, longestRun(dates, 1)) };
+}
+
+/**
+ * 週ごとの連続（日曜はじまり。ヒートマップと同じ）。その週に 1 日でもやっていれば、その週は続いている。
+ * 今週がまだ空なら、先週までの連続を出す（今週も先週も空なら 0）。
+ * 最長は、読み込んだログにある週のうち、いちばん長く続いた週数。
+ */
+export function streakWeeks(counts: Record<string, number>, todayKey: string): StreakResult {
+  const thisSunday = sundayOfDateKey(todayKey);
+  const weeks = new Set<string>();
+  for (const key of Object.keys(counts)) {
+    if (parseDateKey(key) && hasCount(counts, key) && key <= todayKey) weeks.add(sundayOfDateKey(key));
+  }
+  const hasWeek = (sunday: string) => weeks.has(sunday);
+  const start = hasWeek(thisSunday) ? thisSunday : shiftDateKey(thisSunday, -7);
+  const current = currentRun(start, hasWeek, 7);
+  return { current, longest: Math.max(current, longestRun([...weeks], 7)) };
+}
+
+/** ログのファイル名やパスから、月（YYYY-MM）を取り出す。YYYY-MM-tasks.json と YYYY-MM.jsonl に対応。 */
+export function monthKeyFromLogPath(path: string): string | null {
+  const name = path.replace(/\\/g, "/").split("/").pop() ?? "";
+  const match = /^(\d{4}-\d{2})(?:-tasks\.json|\.jsonl)$/.exec(name);
+  return match?.[1] ?? null;
+}
+
+/** ログのパスから、重複のない月（YYYY-MM）を古い順に集める。 */
+export function collectLogMonthKeys(paths: string[]): string[] {
+  const months: string[] = [];
+  for (const path of paths) {
+    const month = monthKeyFromLogPath(path);
+    if (month && !months.includes(month)) months.push(month);
+  }
+  months.sort();
+  return months;
+}

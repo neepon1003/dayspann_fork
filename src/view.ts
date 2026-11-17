@@ -24,7 +24,8 @@ import {
   countHabitDays,
   HabitLogDays,
   heatmapLevel,
-  heatmapMonthKeys,
+  streakDays,
+  streakWeeks,
 } from "./habit-log";
 import { durationUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
@@ -110,7 +111,7 @@ export class DayspannView extends ItemView {
 
     const today = this.plugin.todayKey();
     if (tab === "habit") {
-      const logs = await this.plugin.loadTaskChuteLogs(heatmapMonthKeys(today));
+      const logs = await this.plugin.loadTaskChuteLogs(await this.plugin.listTaskChuteLogMonths(today));
       if (refreshVersion !== this.refreshVersion) return;
       this.renderHabits(root, records, today, logs);
       return;
@@ -398,7 +399,7 @@ export class DayspannView extends ItemView {
     });
   }
 
-  /** 習慣のヒートマップ。直近 4 週を、左から日月火…、上が古く下が今週の行で出し、下に直近 30 日の日数を出す。 */
+  /** 習慣のヒートマップ。直近 4 週を出し、下に直近 30 日の日数と、連続・最長の記録を出す。 */
   private renderHeatmap(parent: HTMLElement, record: DayspannRecord, logs: HabitLogDays, todayKey: string): void {
     const counts = countHabitDays(logs, {
       taskId: record.taskchute?.taskId,
@@ -433,9 +434,21 @@ export class DayspannView extends ItemView {
         cell.setAttribute("aria-label", label);
       }
     }
-    const summary = this.plugin.t("heatmap.recent", { days: 30, count: countActiveDays(counts, todayKey, 30) });
-    grid.setAttribute("aria-label", summary);
-    wrap.createDiv({ text: summary, cls: "dayspann-heatmap-summary" });
+    const recent = this.plugin.t("heatmap.recent", { days: 30, count: countActiveDays(counts, todayKey, 30) });
+    const streak = record.streakUnit === "day" ? streakDays(counts, todayKey) : streakWeeks(counts, todayKey);
+    const streakKey =
+      streak.current > 0
+        ? record.streakUnit === "day"
+          ? "heatmap.streakDays"
+          : "heatmap.streakWeeks"
+        : record.streakUnit === "day"
+          ? "heatmap.streakDaysZero"
+          : "heatmap.streakWeeksZero";
+    const streakText = this.plugin.t(streakKey, { current: streak.current, longest: streak.longest });
+    grid.setAttribute("aria-label", `${recent} ${streakText}`);
+    const summary = wrap.createDiv("dayspann-heatmap-summary");
+    summary.createDiv({ text: recent });
+    summary.createDiv({ text: streakText });
   }
 
   /** 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・アーカイブ・削除だけ。 */

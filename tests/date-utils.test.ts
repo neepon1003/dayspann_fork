@@ -45,6 +45,7 @@ import { normalizeRecordType, readRecordType } from "../src/record-type";
 import { groupHabitsByCategory, readCategory } from "../src/habit-category";
 import {
   buildHeatmapWeeks,
+  collectLogMonthKeys,
   countActiveDays,
   countHabitDays,
   HEATMAP_WEEKS,
@@ -53,8 +54,13 @@ import {
   isLogEntryCompleted,
   matchesHabit,
   mergeHabitLogs,
+  monthKeyFromLogPath,
   parseDeltaLines,
   parseMonthlyLog,
+  readStreakUnit,
+  streakDays,
+  streakWeeks,
+  sundayOfDateKey,
 } from "../src/habit-log";
 import {
   buildNewNoteBody,
@@ -973,5 +979,90 @@ test("習慣の見出しの折りたたみ状態はキーのリストで重複�
   assert.deepEqual(toggleCollapsedKey(["読書", ""], "", false), ["読書"]);
   assert.deepEqual(toggleCollapsedKey([], ALL_HABITS_GROUP_KEY, true), [ALL_HABITS_GROUP_KEY]);
   assert.deepEqual(toggleCollapsedKey([ALL_HABITS_GROUP_KEY], ALL_HABITS_GROUP_KEY, false), []);
+});
+
+test("連続の単位は routine_type が daily のときだけ日で、ログの月はファイル名から集める", () => {
+  assert.equal(readStreakUnit("daily"), "day");
+  assert.equal(readStreakUnit(" Daily "), "day");
+  assert.equal(readStreakUnit("DAILY"), "day");
+  assert.equal(readStreakUnit("weekly"), "week");
+  assert.equal(readStreakUnit("monthly"), "week");
+  assert.equal(readStreakUnit("monthly_date"), "week");
+  assert.equal(readStreakUnit("weekdays"), "week");
+  assert.equal(readStreakUnit("weekends"), "week");
+  assert.equal(readStreakUnit(""), "week");
+  assert.equal(readStreakUnit(undefined), "week");
+  assert.equal(readStreakUnit(true), "week");
+
+  assert.equal(monthKeyFromLogPath("TaskChute/Log/2026-11-tasks.json"), "2026-11");
+  assert.equal(monthKeyFromLogPath("TaskChute/Log/inbox/iphone/2026-10.jsonl"), "2026-10");
+  assert.equal(monthKeyFromLogPath("readme.md"), null);
+  assert.deepEqual(
+    collectLogMonthKeys([
+      "TaskChute/Log/2026-11-tasks.json",
+      "TaskChute/Log/inbox/iphone/2026-10.jsonl",
+      "TaskChute/Log/2026-11-tasks.json",
+      "TaskChute/Log/notes.md",
+    ]),
+    ["2026-10", "2026-11"]
+  );
+});
+
+test("日の連続は今日が空なら昨日まで、週の連続は今週が空なら先週まで数え、最長も出す", () => {
+  const today = "2026-11-17";
+  assert.deepEqual(
+    streakDays({ "2026-11-15": 1, "2026-11-16": 2, "2026-11-17": 1 }, today),
+    { current: 3, longest: 3 }
+  );
+  assert.deepEqual(
+    streakDays({ "2026-11-15": 1, "2026-11-16": 1 }, today),
+    { current: 2, longest: 2 }
+  );
+  assert.deepEqual(
+    streakDays({ "2026-11-14": 1, "2026-11-15": 1 }, today),
+    { current: 0, longest: 2 }
+  );
+  assert.deepEqual(
+    streakDays({ "2026-11-01": 1, "2026-11-02": 1, "2026-11-03": 1, "2026-11-16": 1, "2026-11-17": 1 }, today),
+    { current: 2, longest: 3 }
+  );
+  assert.deepEqual(streakDays({}, today), { current: 0, longest: 0 });
+  assert.deepEqual(streakDays({ "2026-11-17": 1, bad: 2 }, today), { current: 1, longest: 1 });
+
+  assert.equal(sundayOfDateKey("2026-11-17"), "2026-11-15");
+  assert.equal(sundayOfDateKey("2026-11-15"), "2026-11-15");
+  assert.deepEqual(
+    streakWeeks({ "2026-11-17": 1 }, today),
+    { current: 1, longest: 1 }
+  );
+  assert.deepEqual(
+    streakWeeks({ "2026-11-10": 1 }, today),
+    { current: 1, longest: 1 }
+  );
+  assert.deepEqual(
+    streakWeeks({ "2026-11-07": 1 }, today),
+    { current: 0, longest: 1 }
+  );
+  assert.deepEqual(
+    streakWeeks(
+      { "2026-10-25": 1, "2026-11-03": 1, "2026-11-10": 1, "2026-11-17": 1 },
+      today
+    ),
+    { current: 4, longest: 4 }
+  );
+  assert.deepEqual(
+    streakWeeks({ "2026-10-18": 1, "2026-11-03": 1, "2026-11-10": 1 }, today),
+    { current: 2, longest: 2 }
+  );
+  assert.deepEqual(streakWeeks({}, today), { current: 0, longest: 0 });
+
+  const t = createTranslator("ja");
+  assert.equal(t("heatmap.streakDays", { current: 5, longest: 21 }), "🔥 5日連続・最長 21日");
+  assert.equal(t("heatmap.streakDaysZero", { current: 0, longest: 21 }), "連続 0日・最長 21日");
+  assert.equal(t("heatmap.streakWeeks", { current: 3, longest: 8 }), "🔥 3週連続・最長 8週");
+  assert.equal(t("heatmap.streakWeeksZero", { current: 0, longest: 8 }), "連続 0週・最長 8週");
+  const en = createTranslator("en");
+  assert.equal(en("heatmap.streakDays", { current: 5, longest: 21 }), "🔥 5-day streak · best 21 days");
+  assert.equal(en("heatmap.streakWeeksZero", { current: 0, longest: 8 }), "0-week streak · best 8 weeks");
 });
 
