@@ -151,6 +151,9 @@ const JA_MESSAGES = {
   "heatmap.streakWeeks": "🔥 {current}週連続・最長 {longest}週",
   "heatmap.streakDaysZero": "連続 {current}日・最長 {longest}日",
   "heatmap.streakWeeksZero": "連続 {current}週・最長 {longest}週",
+  "heatmap.recentLabel": "直近{days}日",
+  "heatmap.streakLabel": "連続",
+  "heatmap.bestLabel": "最長",
   "heatmap.weekdays": "日月火水木金土",
   "setting.calculation": "期間の計算",
   "setting.calculationDesc": "日数はカレンダー日で計算します。期日と今日が同じ日は0日です。",
@@ -311,6 +314,9 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "heatmap.streakWeeks": "🔥 {current}-week streak · best {longest} weeks",
   "heatmap.streakDaysZero": "{current}-day streak · best {longest} days",
   "heatmap.streakWeeksZero": "{current}-week streak · best {longest} weeks",
+  "heatmap.recentLabel": "Last {days} days",
+  "heatmap.streakLabel": "Streak",
+  "heatmap.bestLabel": "Best",
   "heatmap.weekdays": "SMTWTFS",
   "setting.calculation": "Span calculation",
   "setting.calculationDesc": "Days are counted as calendar days. A due date matching today is 0 days.",
@@ -338,16 +344,24 @@ export function createTranslator(language: string): Translator {
 
 export function durationUnit(
   locale: DayspannLocale,
-  unit: "day" | "month" | "year",
+  unit: "day" | "week" | "month" | "year",
   value: number
 ): string {
   if (locale === "ja") {
     if (unit === "day") return "日";
+    if (unit === "week") return "週";
     if (unit === "month") return "ヶ月";
     return "年";
   }
 
   if (unit === "day") return value === 1 ? "day" : "days";
+  if (unit === "week") return value === 1 ? "week" : "weeks";
   if (unit === "month") return value === 1 ? "month" : "months";
   return value === 1 ? "year" : "years";
+}
+
+/** 回数と単位を、画面に出す形にする。日本語は「8日」「5週」、英語は「8 days」「5 weeks」。 */
+export function formatCountUnit(locale: DayspannLocale, value: number, unit: "day" | "week"): string {
+  const label = durationUnit(locale, unit, value);
+  return locale === "ja" ? `${value}${label}` : `${value} ${label}`;
 }

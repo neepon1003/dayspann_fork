@@ -27,7 +27,7 @@ import {
   streakDays,
   streakWeeks,
 } from "./habit-log";
-import { durationUnit } from "./i18n";
+import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, splitTitle } from "./note-template";
@@ -333,7 +333,7 @@ export class DayspannView extends ItemView {
     });
   }
 
-  /** 習慣のカード。名前・最終更新日・止まっている印・ヒートマップ・「…」だけを出す。 */
+  /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。 */
   private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
     if (record.archived) card.addClass("dayspann-card--done");
@@ -358,37 +358,34 @@ export class DayspannView extends ItemView {
     });
 
     const title = displayTitle(record.title);
-    card.createDiv("dayspann-card-accent").setText(title.slice(0, 1));
     const content = card.createDiv("dayspann-card-content");
-    content.createEl("h3", { text: title });
+    const head = content.createDiv("dayspann-habit-head");
+    const headText = head.createDiv("dayspann-habit-head-text");
+    headText.createEl("h3", { text: title });
     const todayKey = this.plugin.todayKey();
     const updated = formatCompletedCardDate(
       toDateKey(new Date(record.file.stat.mtime)),
       todayKey,
       this.plugin.locale()
     );
-    content.createDiv({
+    headText.createDiv({
       text: this.plugin.t("view.lastUpdated", { date: updated }),
       cls: "dayspann-card-date",
     });
-    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
-    if (logs && record.taskchute && !record.archived) {
-      this.renderHeatmap(content, record, logs, todayKey);
-    }
 
-    const row = card.createDiv("dayspann-count-row");
+    const headActions = head.createDiv("dayspann-habit-head-actions");
     const stalled = record.archived
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
     if (stalled !== null) {
-      const mark = row.createDiv("dayspann-stalled");
+      const mark = headActions.createDiv("dayspann-stalled");
       setIcon(mark, "hourglass");
       const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
       setTooltip(mark, tooltip);
       mark.setAttribute("aria-label", tooltip);
     }
 
-    const actions = row.createDiv("dayspann-card-actions");
+    const actions = headActions.createDiv("dayspann-card-actions");
     const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -397,16 +394,22 @@ export class DayspannView extends ItemView {
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
+
+    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
+    if (logs && record.taskchute && !record.archived) {
+      this.renderHeatmap(content, record, logs, todayKey);
+    }
   }
 
-  /** 習慣のヒートマップ。直近 4 週を出し、下に直近 30 日の日数と、連続・最長の記録を出す。 */
+  /** 習慣のヒートマップ。直近 4 週を左に出し、右に直近 30 日・連続・最長を並べる。 */
   private renderHeatmap(parent: HTMLElement, record: DayspannRecord, logs: HabitLogDays, todayKey: string): void {
     const counts = countHabitDays(logs, {
       taskId: record.taskchute?.taskId,
       path: record.file.path,
       basename: record.file.basename,
     });
-    const wrap = parent.createDiv("dayspann-heatmap");
+    const body = parent.createDiv("dayspann-habit-body");
+    const wrap = body.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
     const header = grid.createDiv({ cls: "dayspann-heatmap-dow", attr: { "aria-hidden": "true" } });
     const weekdays = this.plugin.t("heatmap.weekdays");
@@ -434,21 +437,32 @@ export class DayspannView extends ItemView {
         cell.setAttribute("aria-label", label);
       }
     }
-    const recent = this.plugin.t("heatmap.recent", { days: 30, count: countActiveDays(counts, todayKey, 30) });
+    const locale = this.plugin.locale();
+    const recentDays = countActiveDays(counts, todayKey, 30);
     const streak = record.streakUnit === "day" ? streakDays(counts, todayKey) : streakWeeks(counts, todayKey);
-    const streakKey =
-      streak.current > 0
-        ? record.streakUnit === "day"
-          ? "heatmap.streakDays"
-          : "heatmap.streakWeeks"
-        : record.streakUnit === "day"
-          ? "heatmap.streakDaysZero"
-          : "heatmap.streakWeeksZero";
-    const streakText = this.plugin.t(streakKey, { current: streak.current, longest: streak.longest });
-    grid.setAttribute("aria-label", `${recent} ${streakText}`);
-    const summary = wrap.createDiv("dayspann-heatmap-summary");
-    summary.createDiv({ text: recent });
-    summary.createDiv({ text: streakText });
+    const unit = record.streakUnit;
+    const recentLabel = this.plugin.t("heatmap.recentLabel", { days: 30 });
+    const recentValue = formatCountUnit(locale, recentDays, "day");
+    const streakLabel = this.plugin.t("heatmap.streakLabel");
+    const streakValue = formatCountUnit(locale, streak.current, unit);
+    const bestLabel = this.plugin.t("heatmap.bestLabel");
+    const bestValue = formatCountUnit(locale, streak.longest, unit);
+    grid.setAttribute(
+      "aria-label",
+      `${recentLabel} ${recentValue} ${streakLabel} ${streakValue} ${bestLabel} ${bestValue}`
+    );
+    const stats = body.createDiv("dayspann-habit-stats");
+    this.renderHabitStat(stats, recentLabel, recentValue);
+    this.renderHabitStat(stats, streakLabel, streakValue, streak.current > 0);
+    this.renderHabitStat(stats, bestLabel, bestValue);
+  }
+
+  /** ヒートマップの右に並べる 1 行（左が見出し、右が数字）。連続が続いているときは数字をオレンジにする。 */
+  private renderHabitStat(parent: HTMLElement, label: string, value: string, emphasize = false): void {
+    const row = parent.createDiv("dayspann-habit-stat");
+    row.createDiv({ text: label, cls: "dayspann-habit-stat-label" });
+    const valueEl = row.createDiv({ text: value, cls: "dayspann-habit-stat-value" });
+    if (emphasize) valueEl.addClass("is-active");
   }
 
   /** 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・アーカイブ・削除だけ。 */

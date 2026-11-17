@@ -985,3 +985,106 @@
   --dayspann-heatmap-gap: 3px;
   --dayspann-heatmap-dow-size: 10px;
 }
+
+/* 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。 */
+.dayspann-card.dayspann-card--habit {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  min-height: 0;
+}
+
+.dayspann-view.dayspann-is-narrow .dayspann-card.dayspann-card--habit,
+.dayspann-view.dayspann-is-extra-narrow .dayspann-card.dayspann-card--habit {
+  grid-template-areas: "content";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+}
+
+.dayspann-habit-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dayspann-habit-head-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dayspann-habit-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.dayspann-habit-head-actions .dayspann-card-actions {
+  margin-left: 0;
+}
+
+.dayspann-habit-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px 12px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.dayspann-card--habit .dayspann-heatmap {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.dayspann-habit-stats {
+  position: relative;
+  display: flex;
+  flex: 1 1 8rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 4px;
+  padding-left: 14px;
+}
+
+.dayspann-habit-stats::before {
+  content: "";
+  position: absolute;
+  top: 8%;
+  bottom: 8%;
+  left: 0;
+  width: 1px;
+  background: var(--background-modifier-border);
+}
+
+.dayspann-habit-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dayspann-habit-stat-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.dayspann-habit-stat-value {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dayspann-habit-stat-value.is-active {
+  color: var(--color-orange);
+}

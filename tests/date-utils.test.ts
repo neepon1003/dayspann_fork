@@ -23,7 +23,7 @@ import {
   stalledDays,
   toDateKey,
 } from "../src/date-utils";
-import { createTranslator, durationUnit, resolveLocale } from "../src/i18n";
+import { createTranslator, durationUnit, formatCountUnit, resolveLocale } from "../src/i18n";
 import {
   ALL_HABITS_GROUP_KEY,
   normalizeCollapsedHabitGroups,
@@ -1064,5 +1064,26 @@ test("日の連続は今日が空なら昨日まで、週の連続は今週が�
   const en = createTranslator("en");
   assert.equal(en("heatmap.streakDays", { current: 5, longest: 21 }), "🔥 5-day streak · best 21 days");
   assert.equal(en("heatmap.streakWeeksZero", { current: 0, longest: 8 }), "0-week streak · best 8 weeks");
+});
+
+test("習慣の数字は単位つきで出し、見出しの言葉を日英で用意する", () => {
+  assert.equal(durationUnit("ja", "week", 5), "週");
+  assert.equal(durationUnit("en", "week", 1), "week");
+  assert.equal(durationUnit("en", "week", 5), "weeks");
+  assert.equal(formatCountUnit("ja", 8, "day"), "8日");
+  assert.equal(formatCountUnit("ja", 5, "week"), "5週");
+  assert.equal(formatCountUnit("en", 1, "day"), "1 day");
+  assert.equal(formatCountUnit("en", 8, "day"), "8 days");
+  assert.equal(formatCountUnit("en", 1, "week"), "1 week");
+  assert.equal(formatCountUnit("en", 5, "week"), "5 weeks");
+
+  const t = createTranslator("ja");
+  assert.equal(t("heatmap.recentLabel", { days: 30 }), "直近30日");
+  assert.equal(t("heatmap.streakLabel"), "連続");
+  assert.equal(t("heatmap.bestLabel"), "最長");
+  const en = createTranslator("en");
+  assert.equal(en("heatmap.recentLabel", { days: 30 }), "Last 30 days");
+  assert.equal(en("heatmap.streakLabel"), "Streak");
+  assert.equal(en("heatmap.bestLabel"), "Best");
 });
 
