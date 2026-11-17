@@ -15,6 +15,7 @@ import {
 } from "./date-utils";
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
+import type { EmptyRequiredField } from "./record-edit";
 
 /**
  * 同じ名前がもうあるときの確認。「新しく作る」なら true、「やめる」や閉じたときは false。
@@ -121,6 +122,61 @@ class GoalCompleteModal extends Modal {
 }
 
 /**
+ * 新しく登録するとき、完了条件や期日が空なら確かめる。「このまま登録する」なら true、「戻って入力する」や閉じたときは false。
+ */
+export function confirmEmptyFields(app: App, fields: EmptyRequiredField[], t: Translator): Promise<boolean> {
+  return new Promise((resolve) => {
+    new EmptyFieldsConfirmModal(app, fields, t, resolve).open();
+  });
+}
+
+class EmptyFieldsConfirmModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private fields: EmptyRequiredField[],
+    private t: Translator,
+    private resolve: (register: boolean) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.t("emptyCheck.title"));
+    const goalEmpty = this.fields.includes("goal");
+    const dateEmpty = this.fields.includes("date");
+    const message = goalEmpty && dateEmpty
+      ? this.t("emptyCheck.both")
+      : goalEmpty
+        ? this.t("emptyCheck.goal")
+        : this.t("emptyCheck.date");
+    contentEl.createEl("p", { text: message });
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const back = actions.createEl("button", { text: this.t("emptyCheck.back"), cls: "mod-cta" });
+    back.addEventListener("click", () => this.answer(false));
+    const register = actions.createEl("button", { text: this.t("emptyCheck.register") });
+    register.addEventListener("click", () => this.answer(true));
+    window.setTimeout(() => back.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // ×ボタンや Esc で閉じたときは「戻って入力する」と同じにする。
+    if (!this.answered) this.resolve(false);
+  }
+
+  private answer(register: boolean): void {
+    this.answered = true;
+    this.resolve(register);
+    this.close();
+  }
+}
+
+/**
  * 延期する日付を選ぶ。「決定」なら YYYY-MM-DD、「やめる」や閉じたときは null。
  * 今日より前の日付は受け付けず、案内を出して画面を開いたままにする。
  */
@@ -202,6 +258,9 @@ class PostponeDateModal extends Modal {
     this.close();
   }
 }
+
+/** 登録画面を、エラーの文字を出さずに開いたままにしたいときに投げる（確認で「戻って入力する」を選んだときなど）。 */
+export class KeepEntryOpenError extends Error {}
 
 export class DayspannEntryModal extends Modal {
   private draft: DayspannDraft;
@@ -353,6 +412,7 @@ export class DayspannEntryModal extends Modal {
       this.close();
     } catch (error) {
       button.disabled = false;
+      if (error instanceof KeepEntryOpenError) return;
       this.showError(error instanceof Error ? error.message : this.t("error.saveFailed"));
     }
   }

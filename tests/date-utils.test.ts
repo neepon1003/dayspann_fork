@@ -34,7 +34,7 @@ import {
   isLinkedSourceReference,
   parseSourceReference,
 } from "../src/source-link";
-import { applyDraftToFrontmatter, readGoal, replaceRecordBody } from "../src/record-edit";
+import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import { findDuplicates, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
@@ -763,4 +763,18 @@ test("期日が今日から設定の日数後までなら、期日が近いと�
   assert.equal(createTranslator("en")("dueSoon.tooltip", { days: 3 }), "Due in 3 days");
   assert.equal(createTranslator("en")("dueSoon.tomorrow"), "Due tomorrow");
   assert.equal(createTranslator("en")("dueSoon.today"), "Due today");
+});
+
+test("新しく登録するとき、完了条件と期日のうち空のものを、完了条件・期日の順に返す", () => {
+  assert.deepEqual(emptyRequiredFields({ goal: "結果を共有する", date: "2026-11-17" }), []);
+  assert.deepEqual(emptyRequiredFields({ goal: "", date: "2026-11-17" }), ["goal"]);
+  assert.deepEqual(emptyRequiredFields({ date: "2026-11-17" }), ["goal"]);
+  assert.deepEqual(emptyRequiredFields({ goal: "結果を共有する", date: "" }), ["date"]);
+  assert.deepEqual(emptyRequiredFields({ goal: "  ", date: " " }), ["goal", "date"]);
+  assert.equal(createTranslator("ja")("emptyCheck.title"), "空の項目があります");
+  assert.equal(createTranslator("ja")("emptyCheck.both"), "完了条件と期日が空です。このまま登録しますか？");
+  assert.equal(createTranslator("ja")("emptyCheck.register"), "このまま登録する");
+  assert.equal(createTranslator("ja")("emptyCheck.back"), "戻って入力する");
+  assert.equal(createTranslator("en")("emptyCheck.title"), "Some fields are empty");
+  assert.equal(createTranslator("en")("emptyCheck.date"), "The due date is empty. Add it anyway?");
 });

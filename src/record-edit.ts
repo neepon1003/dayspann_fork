@@ -46,3 +46,13 @@ export function replaceRecordBody(content: string, body: string): string {
   const tail = trimmed ? `\n${trimmed}\n` : "";
   return frontmatter ? `${frontmatter}\n${tail}` : tail.replace(/^\n/, "");
 }
+
+export type EmptyRequiredField = "goal" | "date";
+
+/** 新しく登録するときに確かめる項目のうち、空のもの（完了条件・期日の順）。空白だけのときも空とみなす。 */
+export function emptyRequiredFields(draft: Pick<DayspannDraft, "goal" | "date">): EmptyRequiredField[] {
+  const empty: EmptyRequiredField[] = [];
+  if (!draft.goal?.trim()) empty.push("goal");
+  if (!draft.date.trim()) empty.push("date");
+  return empty;
+}

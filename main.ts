@@ -31,8 +31,14 @@ import {
 } from "./src/i18n";
 import { DuplicateCandidate, findDuplicates } from "./src/duplicate-check";
 import { appendLogLineToFile, resolveCompletedDate } from "./src/log-entry";
-import { confirmDuplicate, confirmGoalComplete, DayspannEntryModal } from "./src/modals";
-import { applyDraftToFrontmatter, replaceRecordBody } from "./src/record-edit";
+import {
+  confirmDuplicate,
+  confirmEmptyFields,
+  confirmGoalComplete,
+  DayspannEntryModal,
+  KeepEntryOpenError,
+} from "./src/modals";
+import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
 import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
@@ -612,6 +618,14 @@ export default class DayspannPlugin extends Plugin {
    * TaskChute が有効なら、TaskChute のタスク（今日の一覧に入る）としても作り、TaskChute の画面が開いていれば読み直す。
    */
   private async registerRecord(draft: DayspannDraft): Promise<void> {
+    const emptyFields = emptyRequiredFields(draft);
+    if (
+      emptyFields.length > 0 &&
+      !(await confirmEmptyFields(this.app, emptyFields, (key, variables) => this.t(key, variables)))
+    ) {
+      // 登録画面は閉じずに、入力した内容のまま残す（エラーの文字は出さない）。
+      throw new KeepEntryOpenError();
+    }
     const host = this.app as unknown as TaskChuteHost;
     const duplicates = this.findDuplicateNotes(draft.title, host);
     if (
