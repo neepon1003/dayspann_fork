@@ -16,6 +16,7 @@ import {
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
 import type { EmptyRequiredField } from "./record-edit";
+import { DEFAULT_RECORD_TYPE, normalizeRecordType } from "./record-type";
 
 /**
  * 同じ名前がもうあるときの確認。「新しく作る」なら true、「やめる」や閉じたときは false。
@@ -278,6 +279,7 @@ export class DayspannEntryModal extends Modal {
     this.draft = {
       ...initial,
       displayMode: initial.displayMode ?? DEFAULT_DISPLAY_MODE,
+      type: initial.type ?? DEFAULT_RECORD_TYPE,
     };
   }
 
@@ -298,7 +300,23 @@ export class DayspannEntryModal extends Modal {
       });
 
     new Setting(contentEl)
+      .setName(this.t("modal.type"))
+      .setDesc(this.t("modal.typeDesc"))
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("project", this.t("type.project"))
+          .addOption("habit", this.t("type.habit"))
+          .setValue(this.draft.type ?? DEFAULT_RECORD_TYPE)
+          .onChange((value) => {
+            this.draft.type = normalizeRecordType(value);
+            this.updateTypeFields();
+          });
+      });
+    this.updateTypeFields();
+
+    new Setting(contentEl)
       .setName(this.t("modal.date"))
+      .setClass("dayspann-project-field")
       .setDesc(this.t("modal.dateDesc"))
       .addText((text) => {
         text.inputEl.type = "date";
@@ -309,6 +327,7 @@ export class DayspannEntryModal extends Modal {
 
     new Setting(contentEl)
       .setName(this.t("modal.goal"))
+      .setClass("dayspann-project-field")
       .setDesc(this.t("modal.goalDesc"))
       .addText((text) => {
         text
@@ -321,6 +340,7 @@ export class DayspannEntryModal extends Modal {
 
     new Setting(contentEl)
       .setName(this.t("modal.display"))
+      .setClass("dayspann-project-field")
       .setDesc(this.t("modal.displayDesc"))
       .addDropdown((dropdown) => {
         dropdown
@@ -401,7 +421,7 @@ export class DayspannEntryModal extends Modal {
       return;
     }
     const date = this.draft.date.trim();
-    if (date && !parseDateKey(date)) {
+    if (this.draft.type !== "habit" && date && !parseDateKey(date)) {
       this.showError(this.t("error.dateInvalid"));
       return;
     }
@@ -415,6 +435,11 @@ export class DayspannEntryModal extends Modal {
       if (error instanceof KeepEntryOpenError) return;
       this.showError(error instanceof Error ? error.message : this.t("error.saveFailed"));
     }
+  }
+
+  /** 種類が習慣のときは、期日・完了条件・表示形式の欄を隠す（CSS の dayspann-entry-modal--habit）。 */
+  private updateTypeFields(): void {
+    this.modalEl.toggleClass("dayspann-entry-modal--habit", this.draft.type === "habit");
   }
 
   private showError(message: string): void {

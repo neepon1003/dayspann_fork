@@ -15,11 +15,13 @@ import {
   monthKey,
   postponeTargets,
   stalledDays,
+  toDateKey,
 } from "./date-utils";
 import { durationUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, splitTitle } from "./note-template";
+import { RECORD_TYPES, RecordType } from "./record-type";
 import { DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
@@ -87,12 +89,21 @@ export class DayspannView extends ItemView {
 
     const actions = header.createDiv("dayspann-header-actions");
     this.iconButton(actions, "refresh-cw", this.plugin.t("view.refresh"), () => void this.refresh());
-    this.iconButton(actions, "plus", this.plugin.t("command.registerManually"), () => this.plugin.openManualEntry());
+    this.iconButton(actions, "plus", this.plugin.t("command.registerManually"), () =>
+      this.plugin.openManualEntry(this.plugin.settings.activeTab)
+    );
 
-    const records = await this.plugin.loadRecords();
+    // 上のタブで選んでいる種類（プロジェクト・習慣）の記録だけを出す。
+    const tab = this.plugin.settings.activeTab;
+    this.renderTabs(root, tab);
+    const records = (await this.plugin.loadRecords()).filter((record) => record.type === tab);
     if (refreshVersion !== this.refreshVersion) return;
 
     const today = this.plugin.todayKey();
+    if (tab === "habit") {
+      this.renderHabits(root, records, today);
+      return;
+    }
     const counted = records.map((record) => ({
       record,
       difference: record.date ? differenceInCalendarDays(record.date, today) : null,
@@ -139,7 +150,7 @@ export class DayspannView extends ItemView {
         text: this.plugin.t("command.registerManually"),
         cls: "mod-cta",
       });
-      button.addEventListener("click", () => this.plugin.openManualEntry());
+      button.addEventListener("click", () => this.plugin.openManualEntry("project"));
       return;
     }
 
@@ -191,6 +202,149 @@ export class DayspannView extends ItemView {
     );
 
     this.renderArchiveSection(root, archived, today);
+  }
+
+  /** 上のタブ（プロジェクト・習慣）。選んだタブは設定に覚えておき、次に開いたときもそのタブにする。 */
+  private renderTabs(root: HTMLElement, active: RecordType): void {
+    const tabs = root.createDiv({
+      cls: "dayspann-tabs",
+      attr: { role: "tablist", "aria-label": this.plugin.t("tab.label") },
+    });
+    for (const type of RECORD_TYPES) {
+      const tab = tabs.createEl("button", {
+        cls: "dayspann-tab",
+        text: this.plugin.t(type === "habit" ? "tab.habit" : "tab.project"),
+        attr: { type: "button", role: "tab", "aria-selected": String(type === active) },
+      });
+      if (type === active) tab.addClass("is-active");
+      tab.addEventListener("click", () => {
+        if (type === this.plugin.settings.activeTab) return;
+        void this.plugin.setActiveTab(type).then(() => this.refresh());
+      });
+    }
+  }
+
+  /** 習慣のタブ。続けている習慣を名前の順に並べ、アーカイブした習慣はいちばん下に月ごとにまとめる。 */
+  private renderHabits(root: HTMLElement, records: DayspannRecord[], todayKey: string): void {
+    if (!records.length) {
+      const empty = root.createDiv("dayspann-empty");
+      setIcon(empty.createDiv("dayspann-empty-icon"), "repeat");
+      empty.createEl("h3", { text: this.plugin.t("view.habitEmptyTitle") });
+      empty.createEl("p", { text: this.plugin.t("view.habitEmptyDescription") });
+      const button = empty.createEl("button", {
+        text: this.plugin.t("command.registerManually"),
+        cls: "mod-cta",
+      });
+      button.addEventListener("click", () => this.plugin.openManualEntry("habit"));
+      return;
+    }
+
+    const active = records
+      .filter((record) => !record.archived)
+      .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
+    if (active.length) {
+      const section = root.createEl("section", { cls: "dayspann-section dayspann-section--habit" });
+      const heading = section.createDiv("dayspann-section-heading dayspann-section-heading--static");
+      setIcon(heading.createSpan("dayspann-section-icon"), "repeat");
+      heading.createSpan({
+        text: this.plugin.t("section.heading", { title: this.plugin.t("section.habit"), count: active.length }),
+      });
+      heading.createSpan("dayspann-section-line");
+      const list = section.createDiv("dayspann-list");
+      for (const record of active) this.renderHabitCard(list, record);
+    }
+
+    const archived = records
+      .filter((record) => record.archived)
+      .map((record) => ({ record, difference: null }))
+      .sort((a, b) =>
+        compareArchiveOrder(a.record.completed, b.record.completed, a.record.date, b.record.date)
+      );
+    this.renderArchiveSection(root, archived, todayKey);
+  }
+
+  /** 習慣のカード。名前・最終更新日・止まっている印・「今日やる」・「…」だけを出す。 */
+  private renderHabitCard(list: HTMLElement, record: DayspannRecord): void {
+    const card = list.createDiv("dayspann-card dayspann-card--habit");
+    if (record.archived) card.addClass("dayspann-card--done");
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.plugin.openRecordFile(record);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        void this.plugin.openRecordFile(record);
+      }
+    });
+    card.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      const menu = new Menu();
+      this.addHabitMenuItems(menu, record);
+      menu.showAtMouseEvent(event);
+    });
+
+    const title = displayTitle(record.title);
+    card.createDiv("dayspann-card-accent").setText(title.slice(0, 1));
+    const content = card.createDiv("dayspann-card-content");
+    content.createEl("h3", { text: title });
+    const todayKey = this.plugin.todayKey();
+    const updated = formatCompletedCardDate(
+      toDateKey(new Date(record.file.stat.mtime)),
+      todayKey,
+      this.plugin.locale()
+    );
+    content.createDiv({
+      text: this.plugin.t("view.lastUpdated", { date: updated }),
+      cls: "dayspann-card-date",
+    });
+
+    const row = card.createDiv("dayspann-count-row");
+    const stalled = record.archived
+      ? null
+      : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
+    if (stalled !== null) {
+      const mark = row.createDiv("dayspann-stalled");
+      setIcon(mark, "hourglass");
+      const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
+      setTooltip(mark, tooltip);
+      mark.setAttribute("aria-label", tooltip);
+    }
+
+    const plan = planCardActions(record, todayKey);
+    const actions = row.createDiv("dayspann-card-actions");
+    if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
+    const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
+    more.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = new Menu();
+      this.addHabitMenuItems(menu, record);
+      const mouse = event as MouseEvent;
+      menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
+    });
+  }
+
+  /** 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・アーカイブ・削除だけ。 */
+  private addHabitMenuItems(menu: Menu, record: DayspannRecord): void {
+    menu.addItem((menuItem) =>
+      menuItem.setTitle(this.plugin.t("action.edit")).setIcon("pencil").onClick(() => this.plugin.openEditEntry(record))
+    );
+    menu.addItem((menuItem) =>
+      menuItem.setTitle(this.plugin.t("action.openRecord")).setIcon("file-text").onClick(() => void this.plugin.openRecordFile(record))
+    );
+    if (record.sourcePath) {
+      menu.addItem((menuItem) =>
+        menuItem.setTitle(this.plugin.t("action.openSource")).setIcon("external-link").onClick(() => void this.plugin.openRecordSource(record))
+      );
+    }
+    menu.addSeparator();
+    this.addArchiveMenuItem(menu, record);
+    menu.addItem((menuItem) =>
+      menuItem.setTitle(this.plugin.t("action.delete")).setIcon("trash-2").onClick(() => void this.plugin.deleteRecord(record))
+    );
   }
 
   /** アーカイブを完了月ごとに分けて出す。今月のグループは開いておき、古い月はたたんでおく。 */
@@ -371,6 +525,10 @@ export class DayspannView extends ItemView {
 
   private renderCard(list: HTMLElement, item: CountedRecord): void {
     const { record, difference } = item;
+    if (record.type === "habit") {
+      this.renderHabitCard(list, record);
+      return;
+    }
     const card = list.createDiv("dayspann-card");
     // 完了していない記録で、期日が今日から設定の日数後までなら「期日が近い」としてオレンジ色にする。
     const dueSoon = record.archived || record.completed

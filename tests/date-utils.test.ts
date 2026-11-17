@@ -36,8 +36,9 @@ import {
 } from "../src/source-link";
 import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
-import { findDuplicates, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
+import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
+import { normalizeRecordType, readRecordType } from "../src/record-type";
 import {
   buildNewNoteBody,
   buildNewNoteTitle,
@@ -777,4 +778,37 @@ test("新しく登録するとき、完了条件と期日のうち空のもの�
   assert.equal(createTranslator("ja")("emptyCheck.back"), "戻って入力する");
   assert.equal(createTranslator("en")("emptyCheck.title"), "Some fields are empty");
   assert.equal(createTranslator("en")("emptyCheck.date"), "The due date is empty. Add it anyway?");
+});
+
+test("種類は project と habit だけを読み、習慣は空の項目を確かめず、編集で期日・完了条件を触らない", () => {
+  assert.equal(readRecordType("project"), "project");
+  assert.equal(readRecordType("habit"), "habit");
+  assert.equal(readRecordType("routine"), null);
+  assert.equal(readRecordType("life"), null);
+  assert.equal(readRecordType("dayspann"), null);
+  assert.equal(readRecordType("pj-span"), null);
+  assert.equal(normalizeRecordType("habit"), "habit");
+  assert.equal(normalizeRecordType(undefined), "project");
+  assert.equal(normalizeRecordType("life"), "project");
+
+  assert.deepEqual(emptyRequiredFields({ type: "habit", goal: "", date: "" }), []);
+  assert.deepEqual(emptyRequiredFields({ type: "project", goal: "", date: "" }), ["goal", "date"]);
+
+  const frontmatter: Record<string, unknown> = { type: "project", title: "読書", date: "2026-12-01", goal: "1冊読む", display: "days" };
+  applyDraftToFrontmatter(frontmatter, { title: "読書｜10分読む", type: "habit", date: "", goal: "", excerpt: "" });
+  assert.equal(frontmatter.type, "habit");
+  assert.equal(frontmatter.title, "読書｜10分読む");
+  assert.equal(frontmatter.date, "2026-12-01");
+  assert.equal(frontmatter.goal, "1冊読む");
+
+  assert.equal(isActiveProjectOrTask({ type: "habit" }), true);
+  assert.equal(isActiveProjectOrTask({ type: "project" }), true);
+  assert.equal(isActiveProjectOrTask({ type: "dayspann" }), false);
+  assert.equal(isActiveProjectOrTask({ type: "routine" }), false);
+  assert.equal(isActiveProjectOrTask({ type: "habit", archived: true }), false);
+
+  assert.equal(createTranslator("ja")("tab.habit"), "習慣");
+  assert.equal(createTranslator("ja")("view.lastUpdated", { date: "11月16日" }), "最終更新 11月16日");
+  assert.equal(createTranslator("en")("tab.project"), "Projects");
+  assert.equal(createTranslator("en")("view.lastUpdated", { date: "November 16" }), "Last updated November 16");
 });

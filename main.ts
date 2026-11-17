@@ -39,6 +39,7 @@ import {
   KeepEntryOpenError,
 } from "./src/modals";
 import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
+import { DEFAULT_RECORD_TYPE, normalizeRecordType, RecordType } from "./src/record-type";
 import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
@@ -86,6 +87,8 @@ export interface DayspannSettings {
   collapsedSections: DayspannSectionKind[];
   undatedCollapsed: boolean;
   archiveCollapsed: boolean;
+  /** 最後に選んだタブ（プロジェクト・習慣）。 */
+  activeTab: RecordType;
 }
 
 const DEFAULT_SETTINGS: DayspannSettings = {
@@ -98,6 +101,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   collapsedSections: [],
   undatedCollapsed: false,
   archiveCollapsed: true,
+  activeTab: DEFAULT_RECORD_TYPE,
 };
 
 export default class DayspannPlugin extends Plugin {
@@ -245,10 +249,11 @@ export default class DayspannPlugin extends Plugin {
     ).open();
   }
 
-  openManualEntry(): void {
+  /** 手で登録する画面を開く。種類のはじめの値は type（一覧から開いたときは、いま選んでいるタブ）。 */
+  openManualEntry(type: RecordType = DEFAULT_RECORD_TYPE): void {
     new DayspannEntryModal(
       this.app,
-      { title: "", date: this.todayKey(), excerpt: "" },
+      { title: "", date: this.todayKey(), excerpt: "", type },
       this.t("modal.registerManual"),
       this.t("action.register"),
       (key, variables) => this.t(key, variables),
@@ -264,6 +269,7 @@ export default class DayspannPlugin extends Plugin {
       this.app,
       {
         title: record.title,
+        type: record.type,
         date: record.date,
         goal: record.goal,
         displayMode: record.displayMode,
@@ -299,12 +305,14 @@ export default class DayspannPlugin extends Plugin {
   }
 
   async setRecordArchived(record: DayspannRecord, archived: boolean): Promise<void> {
-    // 完了にするとき、完了条件が書いてあれば先に確認する。空なら確認せずに完了にする。
-    if (archived && record.goal) {
+    // プロジェクトを完了にするとき、完了条件が書いてあれば先に確認する。空なら確認せずに完了にする。
+    // 習慣は、完了条件の確認も、ログの「完了」行も出さない。
+    const isProject = record.type === "project";
+    if (archived && isProject && record.goal) {
       const confirmed = await confirmGoalComplete(this.app, record.goal, (key, variables) => this.t(key, variables));
       if (!confirmed) return;
     }
-    if (archived) {
+    if (archived && isProject) {
       const logLine = `- ${this.todayKey()} 完了`;
       await this.app.vault.process(record.file, (content) => appendLogLineToFile(content, logLine));
     }
@@ -494,6 +502,11 @@ export default class DayspannPlugin extends Plugin {
     await this.saveSettings();
   }
 
+  async setActiveTab(type: RecordType): Promise<void> {
+    this.settings.activeTab = type;
+    await this.saveSettings();
+  }
+
   private async loadSettings(): Promise<void> {
     const saved = (await this.loadData()) as Partial<DayspannSettings> | null;
     const savedStorageFolder = saved?.storageFolder?.trim();
@@ -516,6 +529,7 @@ export default class DayspannPlugin extends Plugin {
       collapsedSections: normalizeCollapsedSections(saved?.collapsedSections),
       undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
       archiveCollapsed: saved?.archiveCollapsed ?? DEFAULT_SETTINGS.archiveCollapsed,
+      activeTab: normalizeRecordType(saved?.activeTab),
     };
   }
 

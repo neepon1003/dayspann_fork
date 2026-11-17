@@ -8,11 +8,14 @@ import {
 } from "./date-utils";
 import { buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
 import { readGoal } from "./record-edit";
+import { DEFAULT_RECORD_TYPE, readRecordType, RecordType } from "./record-type";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 import { isTaskChuteTask, readTargetDate, TaskChuteNewTaskFields } from "./taskchute";
 
 export interface DayspannRecord {
   file: TFile;
+  /** 種類（frontmatter の type）。project（プロジェクト）か habit（習慣）。 */
+  type: RecordType;
   title: string;
   date: string;
   /** 完了条件（frontmatter の goal）。書いていなければ空文字。 */
@@ -29,6 +32,8 @@ export interface DayspannRecord {
 }
 
 export interface DayspannDraft {
+  /** 種類。なければ project。 */
+  type?: RecordType;
   title: string;
   date: string;
   goal?: string;
@@ -48,7 +53,7 @@ export interface DayspannDraft {
  */
 export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTaskFields): string {
   const frontmatter: Record<string, string | number | boolean | string[]> = {
-    type: "project",
+    type: draft.type ?? DEFAULT_RECORD_TYPE,
     title: buildNewNoteTitle(draft.title),
     notetoolbar: [...NEW_NOTE_TOOLBAR],
     date: draft.date,
@@ -56,8 +61,14 @@ export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTa
     created: draft.created ?? new Date().toISOString(),
   };
 
-  const goal = readGoal(draft.goal);
-  if (goal) frontmatter.goal = goal;
+  if (frontmatter.type === "habit") {
+    // 習慣には、期日・表示形式・完了条件を書かない。
+    delete frontmatter.date;
+    delete frontmatter.display;
+  } else {
+    const goal = readGoal(draft.goal);
+    if (goal) frontmatter.goal = goal;
+  }
 
   if (draft.archived) frontmatter.archived = true;
   if (draft.completed) frontmatter.completed = draft.completed;
@@ -85,15 +96,9 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     return null;
   }
 
-  // Also read records made before the rename to PJ-span ("dayspann"), pre-0.1.7 beta records ("dayspan"), and the previous PJ-span type ("pj-span").
-  if (
-    data.type !== "project" &&
-    data.type !== "pj-span" &&
-    data.type !== "dayspann" &&
-    data.type !== "dayspan"
-  ) {
-    return null;
-  }
+  // PJ-span に出すのは、type が project（プロジェクト）か habit（習慣）のノートだけ。
+  const type = readRecordType(data.type);
+  if (!type) return null;
   const title = typeof data.title === "string" ? data.title.trim() : "";
   const rawDate =
     data.date instanceof Date
@@ -107,6 +112,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
   const sourceLine = Number(data.sourceLine);
   return {
     file,
+    type,
     title,
     date,
     goal: readGoal(data.goal),

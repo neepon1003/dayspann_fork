@@ -8,19 +8,23 @@ export function readGoal(value: unknown): string {
 
 /**
  * 編集画面の内容を、いまの frontmatter に上書きする。
- * PJ-span が使うキー（title・date・goal・display・archived・completed・source・sourceLine）だけを変え、type・created・TaskChute の taskId / tags / target_date などはそのまま残す。
+ * PJ-span が使うキー（title・type・date・goal・display・archived・completed・source・sourceLine）だけを変え、created・TaskChute の taskId / tags / target_date などはそのまま残す。
+ * 種類が習慣のときは、date・goal・display は触らない（プロジェクトに戻したとき、元の値が残るように）。
  */
 export function applyDraftToFrontmatter(
   frontmatter: Record<string, unknown>,
   draft: DayspannDraft
 ): void {
   frontmatter.title = draft.title.trim();
-  if (draft.date) frontmatter.date = draft.date;
-  else delete frontmatter.date;
-  const goal = readGoal(draft.goal);
-  if (goal) frontmatter.goal = goal;
-  else delete frontmatter.goal;
-  if (draft.displayMode) frontmatter.display = draft.displayMode;
+  if (draft.type) frontmatter.type = draft.type;
+  if (draft.type !== "habit") {
+    if (draft.date) frontmatter.date = draft.date;
+    else delete frontmatter.date;
+    const goal = readGoal(draft.goal);
+    if (goal) frontmatter.goal = goal;
+    else delete frontmatter.goal;
+    if (draft.displayMode) frontmatter.display = draft.displayMode;
+  }
 
   if (draft.archived) frontmatter.archived = true;
   else delete frontmatter.archived;
@@ -49,8 +53,9 @@ export function replaceRecordBody(content: string, body: string): string {
 
 export type EmptyRequiredField = "goal" | "date";
 
-/** 新しく登録するときに確かめる項目のうち、空のもの（完了条件・期日の順）。空白だけのときも空とみなす。 */
-export function emptyRequiredFields(draft: Pick<DayspannDraft, "goal" | "date">): EmptyRequiredField[] {
+/** 新しく登録するときに確かめる項目のうち、空のもの（完了条件・期日の順）。空白だけのときも空とみなす。習慣は確かめない。 */
+export function emptyRequiredFields(draft: Pick<DayspannDraft, "goal" | "date" | "type">): EmptyRequiredField[] {
+  if (draft.type === "habit") return [];
   const empty: EmptyRequiredField[] = [];
   if (!draft.goal?.trim()) empty.push("goal");
   if (!draft.date.trim()) empty.push("date");

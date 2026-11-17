@@ -1,4 +1,5 @@
 import { isTaskChuteTask } from "./taskchute";
+import { readRecordType } from "./record-type";
 
 /**
  * 同じ名前のプロジェクト・タスクがもうあるかを調べる（新しく登録するときの二重登録を防ぐため）。
@@ -23,11 +24,10 @@ export function stripDatePrefix(basename: string): string {
   return basename.replace(/^\d{4}-\d{2}-\d{2} - /, "");
 }
 
-/** PJ-span の記録か TaskChute のタスクで、アーカイブ（完了）していないものか。 */
+/** PJ-span の記録（プロジェクト・習慣）か TaskChute のタスクで、アーカイブ（完了）していないものか。 */
 export function isActiveProjectOrTask(frontmatter: Record<string, unknown>): boolean {
   if (frontmatter.archived === true) return false;
-  const type = frontmatter.type;
-  const isRecord = type === "project" || type === "pj-span" || type === "dayspann" || type === "dayspan";
+  const isRecord = readRecordType(frontmatter.type) !== null;
   return isRecord || isTaskChuteTask(frontmatter);
 }
 
