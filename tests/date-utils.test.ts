@@ -40,6 +40,18 @@ import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDa
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
 import {
+  buildHeatmapWeeks,
+  countActiveDays,
+  countHabitDays,
+  heatmapLevel,
+  heatmapMonthKeys,
+  isLogEntryCompleted,
+  matchesHabit,
+  mergeHabitLogs,
+  parseDeltaLines,
+  parseMonthlyLog,
+} from "../src/habit-log";
+import {
   buildNewNoteBody,
   buildNewNoteTitle,
   displayTitle,
@@ -812,3 +824,65 @@ test("種類は project と habit だけを読み、習慣は空の項目を確�
   assert.equal(createTranslator("en")("tab.project"), "Projects");
   assert.equal(createTranslator("en")("view.lastUpdated", { date: "November 16" }), "Last updated November 16");
 });
+
+test("TaskChute のログを読み、差分を重ねて、習慣ごとに日付ごとの回数を数える", () => {
+  const monthly = JSON.stringify({
+    taskExecutions: {
+      "2026-11-16": [
+        { taskId: "tc-task-a", taskTitle: "古い名前", taskPath: "TaskChute/Task/ストレッチ.md", instanceId: "i1", startTime: "07:00:00", stopTime: "07:10:00" },
+        { taskId: "tc-task-b", taskTitle: "ストレッチ", instanceId: "i2" },
+        { taskTitle: "ストレッチ", taskPath: "TaskChute/Task/ストレッチ.md", startTime: "21:00:00", stopTime: "21:05:00" },
+        { taskTitle: "ストレッチ", taskPath: "TaskChute/Task/ストレッチ.md", startTime: "21:00:00", stopTime: "21:05:00" },
+      ],
+      "2026-11-15": [{ taskName: "ストレッチ", instanceId: "i3", isCompleted: false }],
+      bad: [{ taskId: "tc-task-a" }],
+    },
+  });
+  const days = parseMonthlyLog(monthly);
+  assert.deepEqual(Object.keys(days).sort(), ["2026-11-15", "2026-11-16"]);
+  assert.deepEqual(parseMonthlyLog("{壊れている"), {});
+
+  const deltas = parseDeltaLines([
+    JSON.stringify({ op: "upsert", dateKey: "2026-11-17", recordedAt: "2026-11-17T00:00:00Z", payload: { taskId: "tc-task-a", instanceId: "i4" } }),
+    JSON.stringify({ op: "upsert", dateKey: "2026-11-15", recordedAt: "2026-11-17T00:00:01Z", payload: { instanceId: "i3", isCompleted: true } }),
+    JSON.stringify({ op: "delete", dateKey: "2026-11-16", recordedAt: "2026-11-17T00:00:02Z", payload: { instanceId: "i2" } }),
+    JSON.stringify({ op: "summary", dateKey: "2026-11-16", payload: { summary: { totalTasks: 3 } } }),
+    JSON.stringify({ op: "upsert", dateKey: "2026-11-16", payload: { taskId: "tc-task-a" } }),
+    "読めない行",
+  ].join("\n"));
+  assert.equal(deltas.length, 3);
+
+  const merged = mergeHabitLogs([days], deltas);
+  assert.equal(merged["2026-11-16"]?.length, 3);
+  assert.equal(merged["2026-11-15"]?.[0]?.isCompleted, true);
+  assert.equal(merged["2026-11-15"]?.[0]?.taskName, "ストレッチ");
+
+  const habit = { taskId: "tc-task-a", path: "TaskChute/Task/ストレッチ.md", basename: "ストレッチ" };
+  assert.equal(matchesHabit({ taskId: "tc-task-a", taskPath: "別の場所.md" }, habit), true);
+  assert.equal(matchesHabit({ taskId: "tc-task-b", taskTitle: "ストレッチ" }, habit), false);
+  assert.equal(matchesHabit({ taskPath: "TaskChute/Task/ストレッチ.md" }, habit), true);
+  assert.equal(matchesHabit({ taskTitle: "ストレッチ" }, habit), true);
+  assert.equal(isLogEntryCompleted({ isCompleted: false }), false);
+  assert.equal(isLogEntryCompleted({}), true);
+  assert.deepEqual(countHabitDays(merged, habit), { "2026-11-15": 1, "2026-11-16": 2, "2026-11-17": 1 });
+  assert.deepEqual(countHabitDays(days, habit), { "2026-11-16": 2 });
+
+  assert.equal(heatmapLevel(0), 0);
+  assert.equal(heatmapLevel(1), 1);
+  assert.equal(heatmapLevel(3), 2);
+  assert.equal(countActiveDays({ "2026-11-17": 1, "2026-10-19": 2, "2026-10-18": 1 }, "2026-11-17", 30), 2);
+  assert.equal(createTranslator("ja")("heatmap.done", { date: "11月16日", count: 2 }), "11月16日：2回");
+  assert.equal(createTranslator("ja")("heatmap.recent", { days: 30, count: 12 }), "直近30日：12日");
+});
+
+test("ヒートマップは日曜はじまりの 12 週で、右の列が今週、今日より先は空ける", () => {
+  const weeks = buildHeatmapWeeks("2026-11-18");
+  assert.equal(weeks.length, 12);
+  assert.ok(weeks.every((week) => week.length === 7));
+  assert.deepEqual(weeks[11], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", null, null, null]);
+  assert.equal(weeks[0]?.[0], "2026-08-30");
+  assert.deepEqual(buildHeatmapWeeks("2026-11-21")[11], ["2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21"]);
+  assert.deepEqual(buildHeatmapWeeks("2026-11-22")[11], ["2026-11-22", null, null, null, null, null, null]);
+  assert.deepEqual(heatmapMonthKeys("2026-11-18"), ["2026-08", "2026-09", "2026-10", "2026-11"]);
+});
+

@@ -36,7 +36,10 @@ export function readTargetDate(value: unknown): string | undefined {
 export interface TaskChuteHost {
   plugins?: {
     enabledPlugins?: Set<string>;
-    plugins?: Record<string, { pathManager?: { getTaskFolderPath?: () => unknown } } | undefined>;
+    plugins?: Record<
+      string,
+      { pathManager?: { getTaskFolderPath?: () => unknown; getLogDataPath?: () => unknown } } | undefined
+    >;
   };
   commands?: {
     commands?: Record<string, unknown>;
@@ -121,4 +124,18 @@ function trimFolder(path: string): string {
 function isSameOrInside(child: string, parent: string): boolean {
   if (!parent) return true;
   return child === parent || child.startsWith(`${parent}/`);
+}
+
+/** TaskChute の実行ログのフォルダの既定値（PathService.getLogDataPath）。 */
+export const TASKCHUTE_DEFAULT_LOG_FOLDER = "TaskChute/Log";
+
+/** TaskChute が実行ログを置くフォルダ。TaskChute から聞けなければ既定の TaskChute/Log。 */
+export function getTaskChuteLogFolder(host: Pick<TaskChuteHost, "plugins">): string {
+  try {
+    const path = host.plugins?.plugins?.[TASKCHUTE_PLUGIN_ID]?.pathManager?.getLogDataPath?.();
+    if (typeof path === "string" && path.trim()) return trimFolder(path);
+  } catch {
+    // TaskChute の中の作りが変わっていても、既定のフォルダで続ける。
+  }
+  return TASKCHUTE_DEFAULT_LOG_FOLDER;
 }

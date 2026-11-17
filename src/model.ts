@@ -28,7 +28,7 @@ export interface DayspannRecord {
   sourceLine?: number;
   created: string;
   /** TaskChute のタスクノート（tags に task、または taskId がある）なら入る。 */
-  taskchute?: { targetDate?: string };
+  taskchute?: { targetDate?: string; taskId?: string };
 }
 
 export interface DayspannDraft {
@@ -123,7 +123,12 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     sourcePath: parseSourceReference(data.source),
     sourceLine: Number.isInteger(sourceLine) && sourceLine > 0 ? sourceLine : undefined,
     created: typeof data.created === "string" ? data.created : "",
-    taskchute: isTaskChuteTask(data) ? { targetDate: readTargetDate(data.target_date) } : undefined,
+    taskchute: isTaskChuteTask(data)
+      ? {
+          targetDate: readTargetDate(data.target_date),
+          taskId: typeof data.taskId === "string" && data.taskId.trim() ? data.taskId.trim() : undefined,
+        }
+      : undefined,
   };
 }
 

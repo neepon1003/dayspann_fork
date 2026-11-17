@@ -17,6 +17,14 @@ import {
   stalledDays,
   toDateKey,
 } from "./date-utils";
+import {
+  buildHeatmapWeeks,
+  countActiveDays,
+  countHabitDays,
+  HabitLogDays,
+  heatmapLevel,
+  heatmapMonthKeys,
+} from "./habit-log";
 import { durationUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
@@ -101,7 +109,9 @@ export class DayspannView extends ItemView {
 
     const today = this.plugin.todayKey();
     if (tab === "habit") {
-      this.renderHabits(root, records, today);
+      const logs = await this.plugin.loadTaskChuteLogs(heatmapMonthKeys(today));
+      if (refreshVersion !== this.refreshVersion) return;
+      this.renderHabits(root, records, today, logs);
       return;
     }
     const counted = records.map((record) => ({
@@ -225,7 +235,12 @@ export class DayspannView extends ItemView {
   }
 
   /** 習慣のタブ。続けている習慣を名前の順に並べ、アーカイブした習慣はいちばん下に月ごとにまとめる。 */
-  private renderHabits(root: HTMLElement, records: DayspannRecord[], todayKey: string): void {
+  private renderHabits(
+    root: HTMLElement,
+    records: DayspannRecord[],
+    todayKey: string,
+    logs: HabitLogDays
+  ): void {
     if (!records.length) {
       const empty = root.createDiv("dayspann-empty");
       setIcon(empty.createDiv("dayspann-empty-icon"), "repeat");
@@ -251,7 +266,7 @@ export class DayspannView extends ItemView {
       });
       heading.createSpan("dayspann-section-line");
       const list = section.createDiv("dayspann-list");
-      for (const record of active) this.renderHabitCard(list, record);
+      for (const record of active) this.renderHabitCard(list, record, logs);
     }
 
     const archived = records
@@ -264,7 +279,7 @@ export class DayspannView extends ItemView {
   }
 
   /** 習慣のカード。名前・最終更新日・止まっている印・「今日やる」・「…」だけを出す。 */
-  private renderHabitCard(list: HTMLElement, record: DayspannRecord): void {
+  private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
     if (record.archived) card.addClass("dayspann-card--done");
     card.tabIndex = 0;
@@ -301,6 +316,10 @@ export class DayspannView extends ItemView {
       text: this.plugin.t("view.lastUpdated", { date: updated }),
       cls: "dayspann-card-date",
     });
+    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
+    if (logs && record.taskchute && !record.archived) {
+      this.renderHeatmap(content, record, logs, todayKey);
+    }
 
     const row = card.createDiv("dayspann-count-row");
     const stalled = record.archived
@@ -325,6 +344,38 @@ export class DayspannView extends ItemView {
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
+  }
+
+  /** 習慣のヒートマップ。直近 12 週を、週ごとの列（日曜はじまり、右が今週）で出し、下に直近 30 日の日数を出す。 */
+  private renderHeatmap(parent: HTMLElement, record: DayspannRecord, logs: HabitLogDays, todayKey: string): void {
+    const counts = countHabitDays(logs, {
+      taskId: record.taskchute?.taskId,
+      path: record.file.path,
+      basename: record.file.basename,
+    });
+    const wrap = parent.createDiv("dayspann-heatmap");
+    const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
+    for (const week of buildHeatmapWeeks(todayKey)) {
+      const column = grid.createDiv("dayspann-heatmap-week");
+      for (const dateKey of week) {
+        const cell = column.createDiv("dayspann-heatmap-cell");
+        if (!dateKey) {
+          cell.addClass("dayspann-heatmap-cell--future");
+          continue;
+        }
+        const count = counts[dateKey] ?? 0;
+        cell.addClass(`dayspann-heatmap-cell--${heatmapLevel(count)}`);
+        const date = formatCompletedCardDate(dateKey, todayKey, this.plugin.locale());
+        const label = count > 0
+          ? this.plugin.t("heatmap.done", { date, count })
+          : this.plugin.t("heatmap.none", { date });
+        setTooltip(cell, label);
+        cell.setAttribute("aria-label", label);
+      }
+    }
+    const summary = this.plugin.t("heatmap.recent", { days: 30, count: countActiveDays(counts, todayKey, 30) });
+    grid.setAttribute("aria-label", summary);
+    wrap.createDiv({ text: summary, cls: "dayspann-heatmap-summary" });
   }
 
   /** 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・アーカイブ・削除だけ。 */

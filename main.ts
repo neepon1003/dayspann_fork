@@ -40,12 +40,14 @@ import {
 } from "./src/modals";
 import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
 import { DEFAULT_RECORD_TYPE, normalizeRecordType, RecordType } from "./src/record-type";
+import { HabitLogDays, HabitLogDelta, mergeHabitLogs, parseDeltaLines, parseMonthlyLog } from "./src/habit-log";
 import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
   chooseNewRecordFolder,
   generateTaskChuteTaskId,
   getTaskChuteTaskFolder,
+  getTaskChuteLogFolder,
   isTaskChuteEnabled,
   readTargetDate,
   TASKCHUTE_SHOW_TODAY_COMMAND,
@@ -475,6 +477,47 @@ export default class DayspannPlugin extends Plugin {
     return parsed.filter((record): record is DayspannRecord => record !== null);
   }
 
+  /**
+   * TaskChute Plus の実行ログを、指定した月（YYYY-MM）の分だけ読む（書き込みはしない）。
+   * 月ごとの YYYY-MM-tasks.json に、端末ごとの inbox/<端末>/YYYY-MM.jsonl の差分を重ねる。
+   */
+  async loadTaskChuteLogs(monthKeys: string[]): Promise<HabitLogDays> {
+    const adapter = this.app.vault.adapter;
+    const base = getTaskChuteLogFolder(this.app as unknown as TaskChuteHost);
+    const readText = async (path: string): Promise<string> => {
+      try {
+        const normalized = normalizePath(path);
+        return (await adapter.exists(normalized)) ? await adapter.read(normalized) : "";
+      } catch {
+        return "";
+      }
+    };
+
+    const snapshots: HabitLogDays[] = [];
+    for (const month of monthKeys) {
+      const raw = await readText(`${base}/${month}-tasks.json`);
+      if (raw) snapshots.push(parseMonthlyLog(raw));
+    }
+
+    const deltas: HabitLogDelta[] = [];
+    for (const inbox of [`${base}/inbox`, `${base}/.inbox`]) {
+      let devices: string[] = [];
+      try {
+        const normalized = normalizePath(inbox);
+        if (await adapter.exists(normalized)) devices = (await adapter.list(normalized)).folders;
+      } catch {
+        devices = [];
+      }
+      for (const device of devices) {
+        for (const month of monthKeys) {
+          const raw = await readText(`${device}/${month}.jsonl`);
+          if (raw) deltas.push(...parseDeltaLines(raw));
+        }
+      }
+    }
+    return mergeHabitLogs(snapshots, deltas);
+  }
+
   async refreshViews(): Promise<void> {
     for (const leaf of this.app.workspace.getLeavesOfType(DAYSPANN_VIEW_TYPE)) {
       if (leaf.view instanceof DayspannView) await leaf.view.refresh();
@@ -739,13 +782,20 @@ export default class DayspannPlugin extends Plugin {
   }
 
   private scheduleRefreshForPaths(...paths: string[]): void {
-    if (!paths.some((path) => this.isStoragePath(path))) return;
+    if (!paths.some((path) => this.isStoragePath(path) || this.isTaskChuteLogPath(path))) return;
     this.scheduleRefresh();
   }
 
   private isStoragePath(path: string): boolean {
     const folder = this.normalizedStorageFolder();
     return path === folder || path.startsWith(`${folder}/`);
+  }
+
+  /** 習慣のタブを出しているときだけ、TaskChute のログの変更で読み直す。 */
+  private isTaskChuteLogPath(path: string): boolean {
+    if (this.settings.activeTab !== "habit") return false;
+    const folder = getTaskChuteLogFolder(this.app as unknown as TaskChuteHost);
+    return path.startsWith(`${folder}/`) && (path.endsWith("-tasks.json") || path.endsWith(".jsonl"));
   }
 
   private scheduleRefresh(): void {
