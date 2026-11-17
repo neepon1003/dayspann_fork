@@ -206,9 +206,9 @@ export function heatmapMonthKeys(todayKey: string, weeks = HEATMAP_WEEKS): strin
   return months;
 }
 
-/** マスの濃さ。0 回は 0、1 回は 1、2 回以上は 2。 */
-export function heatmapLevel(count: number): 0 | 1 | 2 {
-  return count <= 0 ? 0 : count === 1 ? 1 : 2;
+/** マスの濃さ。0 回は 0（灰色）、1 回以上は 1（濃い緑）。 */
+export function heatmapLevel(count: number): 0 | 1 {
+  return count <= 0 ? 0 : 1;
 }
 
 /** 今日までの days 日のうち、1 回以上やった日の数。 */

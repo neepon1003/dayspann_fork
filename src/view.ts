@@ -278,7 +278,7 @@ export class DayspannView extends ItemView {
     this.renderArchiveSection(root, archived, todayKey);
   }
 
-  /** 習慣のカード。名前・最終更新日・止まっている印・「今日やる」・「…」だけを出す。 */
+  /** 習慣のカード。名前・最終更新日・止まっている印・ヒートマップ・「…」だけを出す。 */
   private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
     if (record.archived) card.addClass("dayspann-card--done");
@@ -333,9 +333,7 @@ export class DayspannView extends ItemView {
       mark.setAttribute("aria-label", tooltip);
     }
 
-    const plan = planCardActions(record, todayKey);
     const actions = row.createDiv("dayspann-card-actions");
-    if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
     const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -356,8 +354,12 @@ export class DayspannView extends ItemView {
     const wrap = parent.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
     const header = grid.createDiv({ cls: "dayspann-heatmap-dow", attr: { "aria-hidden": "true" } });
-    for (const label of this.plugin.t("heatmap.weekdays")) {
-      header.createDiv({ text: label, cls: "dayspann-heatmap-dow-cell" });
+    const weekdays = this.plugin.t("heatmap.weekdays");
+    for (let index = 0; index < weekdays.length; index += 1) {
+      const cls = ["dayspann-heatmap-dow-cell"];
+      if (index === 0) cls.push("is-sunday");
+      if (index === 6) cls.push("is-saturday");
+      header.createDiv({ text: weekdays[index], cls: cls.join(" ") });
     }
     for (const week of buildHeatmapWeeks(todayKey)) {
       const row = grid.createDiv("dayspann-heatmap-week");

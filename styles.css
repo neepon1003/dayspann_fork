@@ -907,8 +907,9 @@
 
 /* 習慣のヒートマップ。カレンダーのように、左から日月火水木金土、上の行が古く下の行が今週。 */
 .dayspann-heatmap {
-  --dayspann-heatmap-cell: 14px;
-  --dayspann-heatmap-gap: 3px;
+  --dayspann-heatmap-cell: 20px;
+  --dayspann-heatmap-gap: 4px;
+  --dayspann-heatmap-dow-size: 11px;
   --dayspann-heatmap-color: var(--color-green, #22c55e);
   margin-top: 6px;
   min-width: 0;
@@ -938,9 +939,17 @@
 
 .dayspann-heatmap-dow-cell {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--dayspann-heatmap-dow-size);
   line-height: 1.2;
   text-align: center;
+}
+
+.dayspann-heatmap-dow-cell.is-sunday {
+  color: var(--color-red);
+}
+
+.dayspann-heatmap-dow-cell.is-saturday {
+  color: var(--color-blue);
 }
 
 .dayspann-heatmap-cell {
@@ -953,10 +962,6 @@
 }
 
 .dayspann-heatmap-cell--1 {
-  background: color-mix(in srgb, var(--dayspann-heatmap-color) 50%, var(--background-primary));
-}
-
-.dayspann-heatmap-cell--2 {
   background: var(--dayspann-heatmap-color);
 }
 
@@ -972,6 +977,7 @@
 
 /* とても狭いとき（iPhone など）は、マスを少し小さくする。 */
 .dayspann-view.dayspann-is-extra-narrow .dayspann-heatmap {
-  --dayspann-heatmap-cell: 12px;
-  --dayspann-heatmap-gap: 2px;
+  --dayspann-heatmap-cell: 16px;
+  --dayspann-heatmap-gap: 3px;
+  --dayspann-heatmap-dow-size: 10px;
 }

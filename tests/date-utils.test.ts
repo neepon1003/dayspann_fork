@@ -870,7 +870,7 @@ test("TaskChute のログを読み、差分を重ねて、習慣ごとに日付�
 
   assert.equal(heatmapLevel(0), 0);
   assert.equal(heatmapLevel(1), 1);
-  assert.equal(heatmapLevel(3), 2);
+  assert.equal(heatmapLevel(3), 1);
   assert.equal(countActiveDays({ "2026-11-17": 1, "2026-10-19": 2, "2026-10-18": 1 }, "2026-11-17", 30), 2);
   assert.equal(createTranslator("ja")("heatmap.done", { date: "11月16日", count: 2 }), "11月16日：2回");
   assert.equal(createTranslator("ja")("heatmap.recent", { days: 30, count: 12 }), "直近30日：12日");
