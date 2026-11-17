@@ -17,6 +17,7 @@ import {
   stalledDays,
   toDateKey,
 } from "./date-utils";
+import { groupHabitsByCategory } from "./habit-category";
 import {
   buildHeatmapWeeks,
   countActiveDays,
@@ -234,7 +235,7 @@ export class DayspannView extends ItemView {
     }
   }
 
-  /** 習慣のタブ。続けている習慣を名前の順に並べ、アーカイブした習慣はいちばん下に月ごとにまとめる。 */
+  /** 習慣のタブ。続けている習慣を名前の順に並べ、分類があれば見出しごとにまとめ、アーカイブした習慣はいちばん下に月ごとにまとめる。 */
   private renderHabits(
     root: HTMLElement,
     records: DayspannRecord[],
@@ -258,15 +259,16 @@ export class DayspannView extends ItemView {
       .filter((record) => !record.archived)
       .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
     if (active.length) {
-      const section = root.createEl("section", { cls: "dayspann-section dayspann-section--habit" });
-      const heading = section.createDiv("dayspann-section-heading dayspann-section-heading--static");
-      setIcon(heading.createSpan("dayspann-section-icon"), "repeat");
-      heading.createSpan({
-        text: this.plugin.t("section.heading", { title: this.plugin.t("section.habit"), count: active.length }),
-      });
-      heading.createSpan("dayspann-section-line");
-      const list = section.createDiv("dayspann-list");
-      for (const record of active) this.renderHabitCard(list, record, logs);
+      const groups = groupHabitsByCategory(active);
+      const useCategories = groups.some((group) => group.category);
+      if (!useCategories) {
+        this.renderHabitSection(root, this.plugin.t("section.habit"), active, logs);
+      } else {
+        for (const group of groups) {
+          const title = group.category || this.plugin.t("section.other");
+          this.renderHabitSection(root, title, group.items, logs);
+        }
+      }
     }
 
     const archived = records
@@ -276,6 +278,24 @@ export class DayspannView extends ItemView {
         compareArchiveOrder(a.record.completed, b.record.completed, a.record.date, b.record.date)
       );
     this.renderArchiveSection(root, archived, todayKey);
+  }
+
+  /** 習慣の見出しと、その下のカードを出す。 */
+  private renderHabitSection(
+    root: HTMLElement,
+    title: string,
+    records: DayspannRecord[],
+    logs: HabitLogDays
+  ): void {
+    const section = root.createEl("section", { cls: "dayspann-section dayspann-section--habit" });
+    const heading = section.createDiv("dayspann-section-heading dayspann-section-heading--static");
+    setIcon(heading.createSpan("dayspann-section-icon"), "repeat");
+    heading.createSpan({
+      text: this.plugin.t("section.heading", { title, count: records.length }),
+    });
+    heading.createSpan("dayspann-section-line");
+    const list = section.createDiv("dayspann-list");
+    for (const record of records) this.renderHabitCard(list, record, logs);
   }
 
   /** 習慣のカード。名前・最終更新日・止まっている印・ヒートマップ・「…」だけを出す。 */

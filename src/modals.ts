@@ -13,10 +13,11 @@ import {
   normalizeDisplayMode,
   parseDateKey,
 } from "./date-utils";
+import { readCategory } from "./habit-category";
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
 import type { EmptyRequiredField } from "./record-edit";
-import { DEFAULT_RECORD_TYPE, normalizeRecordType } from "./record-type";
+import { DEFAULT_RECORD_TYPE, normalizeRecordType, readRecordType } from "./record-type";
 
 /**
  * 同じ名前がもうあるときの確認。「新しく作る」なら true、「やめる」や閉じたときは false。
@@ -315,6 +316,25 @@ export class DayspannEntryModal extends Modal {
     this.updateTypeFields();
 
     new Setting(contentEl)
+      .setName(this.t("modal.category"))
+      .setClass("dayspann-habit-field")
+      .setDesc(this.t("modal.categoryDesc"))
+      .addText((text) => {
+        text.setValue(this.draft.category ?? "").onChange((value) => {
+          this.draft.category = value;
+        });
+        const suggestions = this.habitCategorySuggestions();
+        if (suggestions.length) {
+          const listId = "dayspann-category-suggestions";
+          const datalist = contentEl.createEl("datalist", { attr: { id: listId } });
+          for (const name of suggestions) {
+            datalist.createEl("option", { attr: { value: name } });
+          }
+          text.inputEl.setAttribute("list", listId);
+        }
+      });
+
+    new Setting(contentEl)
       .setName(this.t("modal.date"))
       .setClass("dayspann-project-field")
       .setDesc(this.t("modal.dateDesc"))
@@ -437,9 +457,21 @@ export class DayspannEntryModal extends Modal {
     }
   }
 
-  /** 種類が習慣のときは、期日・完了条件・表示形式の欄を隠す（CSS の dayspann-entry-modal--habit）。 */
+  /** 種類が習慣のときは、期日・完了条件・表示形式の欄を隠し、分類の欄を出す（CSS の dayspann-entry-modal--habit）。 */
   private updateTypeFields(): void {
     this.modalEl.toggleClass("dayspann-entry-modal--habit", this.draft.type === "habit");
+  }
+
+  /** すでにある習慣の分類を、入力の候補として集める。 */
+  private habitCategorySuggestions(): string[] {
+    const names = new Set<string>();
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const data = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (!data || readRecordType(data.type) !== "habit") continue;
+      const category = readCategory(data.category);
+      if (category) names.add(category);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, "ja"));
   }
 
   private showError(message: string): void {

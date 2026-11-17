@@ -39,6 +39,7 @@ import { planCardActions } from "../src/card-actions";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
+import { groupHabitsByCategory, readCategory } from "../src/habit-category";
 import {
   buildHeatmapWeeks,
   countActiveDays,
@@ -888,5 +889,68 @@ test("ヒートマップは日曜はじまりの 4 週で、左から日月火�
   assert.deepEqual(heatmapMonthKeys("2026-11-18"), ["2026-10", "2026-11"]);
   assert.equal(createTranslator("ja")("heatmap.weekdays"), "日月火水木金土");
   assert.equal(createTranslator("en")("heatmap.weekdays"), "SMTWTFS");
+});
+
+test("習慣の分類を読み、名前順の見出しにまとめ、編集では習慣のときだけ書き込む", () => {
+  assert.equal(readCategory(" 読書 "), "読書");
+  assert.equal(readCategory(""), "");
+  assert.equal(readCategory("   "), "");
+  assert.equal(readCategory(undefined), "");
+  assert.equal(readCategory(123), "");
+  assert.equal(readCategory(["", "  ", "読書", "運動"]), "読書");
+  assert.equal(readCategory(["運動"]), "運動");
+  assert.equal(readCategory([]), "");
+
+  const grouped = groupHabitsByCategory([
+    { title: "スクワット", category: "運動" },
+    { title: "技術書", category: "読書" },
+    { title: "水を飲む" },
+    { title: "走る", category: "運動" },
+    { title: "小説", category: " 読書 " },
+    { title: "英語の単語", category: "英語" },
+    { title: "ストレッチ", category: "" },
+  ]);
+  assert.deepEqual(
+    grouped.map((group) => [group.category, group.items.map((item) => item.title)]),
+    [
+      ["運動", ["スクワット", "走る"]],
+      ["英語", ["英語の単語"]],
+      ["読書", ["技術書", "小説"]],
+      ["", ["水を飲む", "ストレッチ"]],
+    ]
+  );
+  assert.deepEqual(
+    groupHabitsByCategory([{ title: "水を飲む" }, { title: "ストレッチ", category: "  " }]).map(
+      (group) => group.category
+    ),
+    [""]
+  );
+
+  const habitFrontmatter: Record<string, unknown> = { type: "habit", title: "読書" };
+  applyDraftToFrontmatter(habitFrontmatter, {
+    title: "読書",
+    type: "habit",
+    date: "",
+    category: " 読書 ",
+    excerpt: "",
+  });
+  assert.equal(habitFrontmatter.category, "読書");
+  applyDraftToFrontmatter(habitFrontmatter, { title: "読書", type: "habit", date: "", category: "  ", excerpt: "" });
+  assert.equal("category" in habitFrontmatter, false);
+
+  const projectFrontmatter: Record<string, unknown> = { type: "project", title: "企画", category: "仕事" };
+  applyDraftToFrontmatter(projectFrontmatter, {
+    title: "企画",
+    type: "project",
+    date: "2026-12-01",
+    category: "別の分類",
+    excerpt: "",
+  });
+  assert.equal(projectFrontmatter.category, "仕事");
+
+  assert.equal(createTranslator("ja")("section.other"), "その他");
+  assert.equal(createTranslator("ja")("modal.category"), "分類");
+  assert.equal(createTranslator("en")("section.other"), "Other");
+  assert.equal(createTranslator("en")("modal.category"), "Category");
 });
 

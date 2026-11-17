@@ -7,6 +7,7 @@ import {
   readDateKey,
 } from "./date-utils";
 import { buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
+import { readCategory } from "./habit-category";
 import { readGoal } from "./record-edit";
 import { DEFAULT_RECORD_TYPE, readRecordType, RecordType } from "./record-type";
 import { formatSourceReference, parseSourceReference } from "./source-link";
@@ -20,6 +21,8 @@ export interface DayspannRecord {
   date: string;
   /** 完了条件（frontmatter の goal）。書いていなければ空文字。 */
   goal: string;
+  /** 分類（frontmatter の category）。習慣を見出しごとにまとめるときの名前。なければ空文字。 */
+  category: string;
   displayMode: DayspannDisplayMode;
   archived: boolean;
   completed?: string;
@@ -37,6 +40,8 @@ export interface DayspannDraft {
   title: string;
   date: string;
   goal?: string;
+  /** 分類。習慣のときだけ使う。空なら「その他」。 */
+  category?: string;
   displayMode?: DayspannDisplayMode;
   archived?: boolean;
   completed?: string;
@@ -62,9 +67,11 @@ export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTa
   };
 
   if (frontmatter.type === "habit") {
-    // 習慣には、期日・表示形式・完了条件を書かない。
+    // 習慣には、期日・表示形式・完了条件を書かない。分類があれば書く。
     delete frontmatter.date;
     delete frontmatter.display;
+    const category = readCategory(draft.category);
+    if (category) frontmatter.category = category;
   } else {
     const goal = readGoal(draft.goal);
     if (goal) frontmatter.goal = goal;
@@ -116,6 +123,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     title,
     date,
     goal: readGoal(data.goal),
+    category: readCategory(data.category),
     displayMode: normalizeDisplayMode(data.display),
     archived: data.archived === true,
     completed: readDateKey(data.completed) || undefined,

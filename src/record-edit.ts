@@ -1,3 +1,4 @@
+import { readCategory } from "./habit-category";
 import type { DayspannDraft } from "./model";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 
@@ -8,8 +9,9 @@ export function readGoal(value: unknown): string {
 
 /**
  * 編集画面の内容を、いまの frontmatter に上書きする。
- * PJ-span が使うキー（title・type・date・goal・display・archived・completed・source・sourceLine）だけを変え、created・TaskChute の taskId / tags / target_date などはそのまま残す。
- * 種類が習慣のときは、date・goal・display は触らない（プロジェクトに戻したとき、元の値が残るように）。
+ * PJ-span が使うキー（title・type・date・goal・category・display・archived・completed・source・sourceLine）だけを変え、created・TaskChute の taskId / tags / target_date などはそのまま残す。
+ * 種類が習慣のときは、date・goal・display は触らない（プロジェクトに戻したとき、元の値が残るように）。分類は、空でなければ書き、空なら消す。
+ * 種類がプロジェクトのときは、category は触らない。
  */
 export function applyDraftToFrontmatter(
   frontmatter: Record<string, unknown>,
@@ -24,6 +26,10 @@ export function applyDraftToFrontmatter(
     if (goal) frontmatter.goal = goal;
     else delete frontmatter.goal;
     if (draft.displayMode) frontmatter.display = draft.displayMode;
+  } else {
+    const category = readCategory(draft.category);
+    if (category) frontmatter.category = category;
+    else delete frontmatter.category;
   }
 
   if (draft.archived) frontmatter.archived = true;

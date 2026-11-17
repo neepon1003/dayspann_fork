@@ -274,6 +274,7 @@ export default class DayspannPlugin extends Plugin {
         type: record.type,
         date: record.date,
         goal: record.goal,
+        category: record.category,
         displayMode: record.displayMode,
         archived: record.archived,
         completed: record.completed,

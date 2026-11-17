@@ -900,9 +900,17 @@
   cursor: default;
 }
 
-/* 登録・編集画面で種類が「習慣」のときは、期日・完了条件・表示形式の欄を隠す。 */
+/* 登録・編集画面で種類が「習慣」のときは、期日・完了条件・表示形式の欄を隠し、分類の欄を出す。 */
 .dayspann-entry-modal--habit .dayspann-project-field {
   display: none;
+}
+
+.dayspann-entry-modal .dayspann-habit-field {
+  display: none;
+}
+
+.dayspann-entry-modal--habit .dayspann-habit-field {
+  display: flex;
 }
 
 /* 習慣のヒートマップ。カレンダーのように、左から日月火水木金土、上の行が古く下の行が今週。 */
