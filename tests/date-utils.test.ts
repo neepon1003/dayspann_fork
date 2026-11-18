@@ -73,6 +73,7 @@ import {
   readRoutineType,
   readRoutineWeekdays,
   readWeekday,
+  weekStreakTarget,
 } from "../src/habit-target";
 import {
   buildNewNoteBody,
@@ -1321,5 +1322,94 @@ test("ヒートマップの今週は、ルーチンの予定日だけ枠を付�
   assert.equal(t("heatmap.planned", { label: "11月19日：やっていません" }), "11月19日：やっていません・予定");
   const en = createTranslator("en");
   assert.equal(en("heatmap.planned", { label: "Nov 19: not done" }), "Nov 19: not done · Planned");
+});
+
+test("週の連続と最長は、目標日数に届いた週だけを数え、今週が未達でも先週までの連続は残す", () => {
+  assert.equal(weekStreakTarget({ period: "week", target: 2 }), 2);
+  assert.equal(weekStreakTarget({ period: "week", target: 5 }), 5);
+  assert.equal(weekStreakTarget({ period: "week", target: 1 }), 1);
+  assert.equal(weekStreakTarget({ period: "month", target: 1 }), 1);
+  assert.equal(weekStreakTarget({ period: "day", target: 1 }), 1);
+  assert.equal(weekStreakTarget({ period: "week", target: 0 }), 1);
+
+  const today = "2026-11-18";
+  // 目標 2 日。1 日だけの週は連続を切る。今週はまだ 1 日なので、先週までの連続を出す。
+  assert.deepEqual(
+    streakWeeks(
+      {
+        "2026-10-20": 1,
+        "2026-10-22": 1,
+        "2026-10-27": 1,
+        "2026-10-29": 1,
+        "2026-11-03": 1,
+        "2026-11-10": 1,
+        "2026-11-12": 1,
+        "2026-11-17": 1,
+      },
+      today,
+      2
+    ),
+    { current: 1, longest: 2 }
+  );
+  // 今週も 2 日に届いていれば、今週を含める。
+  assert.deepEqual(
+    streakWeeks(
+      {
+        "2026-10-20": 1,
+        "2026-10-22": 1,
+        "2026-10-27": 1,
+        "2026-10-29": 1,
+        "2026-11-03": 1,
+        "2026-11-10": 1,
+        "2026-11-12": 1,
+        "2026-11-16": 1,
+        "2026-11-18": 1,
+      },
+      today,
+      2
+    ),
+    { current: 2, longest: 2 }
+  );
+  // 同じ日に何回やっても 1 日。
+  assert.deepEqual(
+    streakWeeks({ "2026-11-10": 3, "2026-11-17": 2 }, today, 2),
+    { current: 0, longest: 0 }
+  );
+
+  // 平日（目標 5 日）。4 日の週は届かず、今週はまだ 3 日なので先週までの連続を出す。
+  assert.deepEqual(
+    streakWeeks(
+      {
+        "2026-10-19": 1,
+        "2026-10-20": 1,
+        "2026-10-21": 1,
+        "2026-10-22": 1,
+        "2026-10-23": 1,
+        "2026-10-26": 1,
+        "2026-10-27": 1,
+        "2026-10-28": 1,
+        "2026-10-29": 1,
+        "2026-10-30": 1,
+        "2026-11-02": 1,
+        "2026-11-03": 1,
+        "2026-11-04": 1,
+        "2026-11-05": 1,
+        "2026-11-09": 1,
+        "2026-11-10": 1,
+        "2026-11-11": 1,
+        "2026-11-12": 1,
+        "2026-11-13": 1,
+        "2026-11-16": 1,
+        "2026-11-17": 1,
+        "2026-11-18": 1,
+      },
+      today,
+      5
+    ),
+    { current: 1, longest: 2 }
+  );
+
+  // 目標を省略したときは、これまでどおり 1 日でもその週は続く。
+  assert.deepEqual(streakWeeks({ "2026-11-17": 1 }, today), { current: 1, longest: 1 });
 });
 

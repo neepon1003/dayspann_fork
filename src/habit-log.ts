@@ -286,20 +286,25 @@ export function streakDays(counts: Record<string, number>, todayKey: string): St
 }
 
 /**
- * 週ごとの連続（日曜はじまり。ヒートマップと同じ）。その週に 1 日でもやっていれば、その週は続いている。
- * 今週がまだ空なら、先週までの連続を出す（今週も先週も空なら 0）。
+ * 週ごとの連続（日曜はじまり。ヒートマップと同じ）。
+ * その週のやった日数が target（目標日数。省略時は 1）に届いていれば、その週は続いている。
+ * 同じ日に何回やっても 1 日。今週がまだ届いていなければ、先週までの連続を出す（先週も届いていなければ 0）。
  * 最長は、読み込んだログにある週のうち、いちばん長く続いた週数。
  */
-export function streakWeeks(counts: Record<string, number>, todayKey: string): StreakResult {
+export function streakWeeks(counts: Record<string, number>, todayKey: string, target = 1): StreakResult {
+  const goal = Number.isInteger(target) && target >= 1 ? target : 1;
   const thisSunday = sundayOfDateKey(todayKey);
-  const weeks = new Set<string>();
+  const daysByWeek = new Map<string, number>();
   for (const key of Object.keys(counts)) {
-    if (parseDateKey(key) && hasCount(counts, key) && key <= todayKey) weeks.add(sundayOfDateKey(key));
+    if (!parseDateKey(key) || !hasCount(counts, key) || key > todayKey) continue;
+    const sunday = sundayOfDateKey(key);
+    daysByWeek.set(sunday, (daysByWeek.get(sunday) ?? 0) + 1);
   }
-  const hasWeek = (sunday: string) => weeks.has(sunday);
+  const weeks = [...daysByWeek.entries()].filter(([, days]) => days >= goal).map(([sunday]) => sunday);
+  const hasWeek = (sunday: string) => weeks.includes(sunday);
   const start = hasWeek(thisSunday) ? thisSunday : shiftDateKey(thisSunday, -7);
   const current = currentRun(start, hasWeek, 7);
-  return { current, longest: Math.max(current, longestRun([...weeks], 7)) };
+  return { current, longest: Math.max(current, longestRun(weeks, 7)) };
 }
 
 /** ログのファイル名やパスから、月（YYYY-MM）を取り出す。YYYY-MM-tasks.json と YYYY-MM.jsonl に対応。 */

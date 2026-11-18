@@ -29,7 +29,7 @@ import {
   streakWeeks,
   sundayOfDateKey,
 } from "./habit-log";
-import { habitTargetProgress, HabitTargetProgress, isHabitScheduled } from "./habit-target";
+import { habitTargetProgress, HabitTargetProgress, isHabitScheduled, weekStreakTarget } from "./habit-target";
 import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
@@ -502,7 +502,9 @@ export class DayspannView extends ItemView {
     }
     const locale = this.plugin.locale();
     const recentDays = countActiveDays(counts, todayKey, 30);
-    const streak = record.streakUnit === "day" ? streakDays(counts, todayKey) : streakWeeks(counts, todayKey);
+    const streak = record.streakUnit === "day"
+      ? streakDays(counts, todayKey)
+      : streakWeeks(counts, todayKey, weekStreakTarget(record.habitTarget));
     const unit = record.streakUnit;
     const recentLabel = this.plugin.t("heatmap.recentLabel", { days: 30 });
     const recentValue = formatCountUnit(locale, recentDays, "day");

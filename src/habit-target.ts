@@ -130,6 +130,12 @@ export function readHabitTarget(data: Record<string, unknown> | undefined): Habi
   return { period: "week", target: weekdays.length > 0 ? weekdays.length : 1 };
 }
 
+/** 週の連続を数えるときの目標日数。週の習慣はその目標、毎月・毎日などは 1（1 日でもやればその週は続く）。 */
+export function weekStreakTarget(target: HabitTarget): number {
+  if (target.period === "week" && Number.isInteger(target.target) && target.target >= 1) return target.target;
+  return 1;
+}
+
 function countDistinctDays(counts: Record<string, number>, startKey: string, endKey: string): number {
   let done = 0;
   for (const key of Object.keys(counts)) {
