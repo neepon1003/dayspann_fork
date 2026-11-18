@@ -34,6 +34,7 @@ import {
   HabitTargetProgress,
   isHabitScheduled,
   sortHabitsByPending,
+  summarizeHabitTargets,
   weekStreakTarget,
 } from "./habit-target";
 import { durationUnit, formatCountUnit } from "./i18n";
@@ -122,7 +123,7 @@ export class DayspannView extends ItemView {
     if (tab === "habit") {
       const logs = await this.plugin.loadTaskChuteLogs(await this.plugin.listTaskChuteLogMonths(today));
       if (refreshVersion !== this.refreshVersion) return;
-      this.renderHabits(root, records, today, logs);
+      this.renderHabits(root, heading, records, today, logs);
       return;
     }
     const counted = records.map((record) => ({
@@ -246,11 +247,13 @@ export class DayspannView extends ItemView {
   }
 
   /**
-   * 習慣のタブ。続けている習慣を、まだ目標に届いていないものから名前の順に並べ、分類があれば見出しごとにまとめ、
+   * 習慣のタブ。いちばん上（プロジェクトの「今週締め切り」と同じ場所）に目標達成の数を出し、
+   * 続けている習慣を、まだ目標に届いていないものから名前の順に並べ、分類があれば見出しごとにまとめ、
    * アーカイブした習慣はいちばん下に月ごとにまとめる。
    */
   private renderHabits(
     root: HTMLElement,
+    heading: HTMLElement,
     records: DayspannRecord[],
     todayKey: string,
     logs: HabitLogDays
@@ -271,8 +274,11 @@ export class DayspannView extends ItemView {
     const byName = records
       .filter((record) => !record.archived)
       .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
+    // 目標に届いたかは 1 回だけ調べて、上の数と並べ替えの両方に使う。
+    const metByRecord = new Map(byName.map((record) => [record, this.habitMet(record, logs, todayKey)]));
+    this.renderHabitSummary(heading, summarizeHabitTargets([...metByRecord.values()]));
     // まだ目標に届いていない習慣を上に、届いた習慣（✓）を下にする。見出しの中でも、この順番のまま並ぶ。
-    const active = sortHabitsByPending(byName, (record) => this.habitMet(record, logs, todayKey));
+    const active = sortHabitsByPending(byName, (record) => metByRecord.get(record) ?? null);
     if (active.length) {
       const groups = groupHabitsByCategory(active);
       const useCategories = groups.some((group) => group.category);
@@ -293,6 +299,24 @@ export class DayspannView extends ItemView {
         compareArchiveOrder(a.record.completed, b.record.completed, a.record.date, b.record.date)
       );
     this.renderArchiveSection(root, archived, todayKey);
+  }
+
+  /** 「目標達成：3/5」の 1 行。日数を出す習慣が無ければ出さない。全部届いたら ✓ を付けて緑にする。 */
+  private renderHabitSummary(heading: HTMLElement, summary: { met: number; total: number }): void {
+    if (!summary.total) return;
+    const allMet = summary.met === summary.total;
+    const line = heading.createDiv("dayspann-summary");
+    const count = line.createSpan({
+      cls: "dayspann-summary-habit",
+      text: this.plugin.t(allMet ? "view.habitTargetsAllMet" : "view.habitTargetsMet", {
+        met: summary.met,
+        total: summary.total,
+      }),
+    });
+    if (allMet) count.addClass("dayspann-summary-habit--met");
+    const tooltip = this.plugin.t("view.habitTargetsTooltip");
+    setTooltip(count, tooltip);
+    count.setAttribute("aria-label", tooltip);
   }
 
   /** 習慣の見出しと、その下のカードを出す。見出しをクリックすると折りたためる。 */

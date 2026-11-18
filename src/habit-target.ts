@@ -353,3 +353,12 @@ export function sortHabitsByPending<T>(items: T[], isMet: (item: T) => boolean |
     .sort((left, right) => left.rank - right.rank || left.index - right.index)
     .map(({ item }) => item);
 }
+
+/**
+ * 習慣タブの上に出す「目標達成：◯/◯」の数を数える。
+ * true（届いた）を met に数え、日数を出していない null は total にも入れない。
+ */
+export function summarizeHabitTargets(statuses: Array<boolean | null>): { met: number; total: number } {
+  const shown = statuses.filter((status): status is boolean => status !== null);
+  return { met: shown.filter((status) => status).length, total: shown.length };
+}

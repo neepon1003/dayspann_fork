@@ -74,6 +74,7 @@ import {
   readRoutineWeekdays,
   readWeekday,
   sortHabitsByPending,
+  summarizeHabitTargets,
   weekStreakTarget,
 } from "../src/habit-target";
 import {
@@ -1448,3 +1449,9 @@ test("sortHabitsByPending puts habits not yet at their target first and keeps na
   assert.deepEqual(sortHabitsByPending([], () => false), []);
 });
 
+test("summarizeHabitTargets counts met habits out of those that show progress", () => {
+  assert.deepEqual(summarizeHabitTargets([true, false, null, true, false]), { met: 2, total: 4 });
+  assert.deepEqual(summarizeHabitTargets([true, true]), { met: 2, total: 2 });
+  assert.deepEqual(summarizeHabitTargets([null, null]), { met: 0, total: 0 });
+  assert.deepEqual(summarizeHabitTargets([]), { met: 0, total: 0 });
+});

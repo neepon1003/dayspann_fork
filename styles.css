@@ -76,6 +76,11 @@
   color: var(--dayspann-future-color);
 }
 
+/* 習慣の目標達成が全部そろったら、カードの ✓ と同じ緑で出す。 */
+.dayspann-summary-habit--met {
+  color: var(--color-green, #22c55e);
+}
+
 .dayspann-header-actions {
   position: absolute;
   top: 0;
