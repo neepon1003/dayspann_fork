@@ -250,6 +250,18 @@ export function sundayOfDateKey(dateKey: string): string {
   return shiftDateKey(dateKey, -weekday);
 }
 
+/**
+ * YYYY-MM-DD が入っている、日曜はじまりの週の番号。1 月 1 日が入っている週を第 1 週とする。
+ * 年をまたぐ週は新しい年の第 1 週になるので、その週の土曜日の年と、土曜日が何日目かで決める。
+ */
+export function sundayWeekNumber(dateKey: string): { year: number; week: number } {
+  const saturday = parseDateKey(shiftDateKey(sundayOfDateKey(dateKey), 6));
+  if (!saturday) throw new Error("日付は YYYY-MM-DD 形式で入力してください");
+  const dayOfYear =
+    (Date.UTC(saturday.year, saturday.month - 1, saturday.day) - Date.UTC(saturday.year, 0, 1)) / 86400000 + 1;
+  return { year: saturday.year, week: Math.floor((dayOfYear - 1) / 7) + 1 };
+}
+
 function longestRun(keys: string[], stepDays: number): number {
   const ordered = [...keys].sort();
   let longest = 0;

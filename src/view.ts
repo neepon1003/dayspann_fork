@@ -28,6 +28,7 @@ import {
   streakDays,
   streakWeeks,
   sundayOfDateKey,
+  sundayWeekNumber,
 } from "./habit-log";
 import {
   habitTargetProgress,
@@ -506,12 +507,14 @@ export class DayspannView extends ItemView {
     };
   }
 
-  /** 習慣のヒートマップ。直近 4 週を左に出し、右に直近 30 日・連続・最長を並べる。 */
+  /** 習慣のヒートマップ。直近 4 週を左に出し（各行の左に週番号、今週の行は色づけ）、右に直近 30 日・連続・最長を並べる。 */
   private renderHeatmap(parent: HTMLElement, record: DayspannRecord, counts: Record<string, number>, todayKey: string): void {
     const body = parent.createDiv("dayspann-habit-body");
     const wrap = body.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
     const header = grid.createDiv({ cls: "dayspann-heatmap-dow", attr: { "aria-hidden": "true" } });
+    // 週番号の列の上は空けて、曜日とマスの列をそろえる。
+    header.createDiv("dayspann-heatmap-weeknum");
     const weekdays = this.plugin.t("heatmap.weekdays");
     for (let index = 0; index < weekdays.length; index += 1) {
       const cls = ["dayspann-heatmap-dow-cell"];
@@ -524,6 +527,10 @@ export class DayspannView extends ItemView {
     for (const [weekIndex, week] of weeks.entries()) {
       const isThisWeek = weekIndex === weeks.length - 1;
       const row = grid.createDiv("dayspann-heatmap-week");
+      if (isThisWeek) row.addClass("dayspann-heatmap-week--current");
+      const weekNumber = sundayWeekNumber(week[0] ?? thisSunday);
+      const weekNumberEl = row.createDiv({ text: String(weekNumber.week), cls: "dayspann-heatmap-weeknum" });
+      setTooltip(weekNumberEl, this.plugin.t("heatmap.weekNumber", weekNumber));
       for (let day = 0; day < week.length; day += 1) {
         const raw = week[day];
         const dateKey = raw ?? (isThisWeek ? shiftDateKey(thisSunday, day) : null);

@@ -61,6 +61,7 @@ import {
   streakDays,
   streakWeeks,
   sundayOfDateKey,
+  sundayWeekNumber,
 } from "../src/habit-log";
 import {
   habitTargetProgress,
@@ -1454,4 +1455,21 @@ test("summarizeHabitTargets counts met habits out of those that show progress", 
   assert.deepEqual(summarizeHabitTargets([true, true]), { met: 2, total: 2 });
   assert.deepEqual(summarizeHabitTargets([null, null]), { met: 0, total: 0 });
   assert.deepEqual(summarizeHabitTargets([]), { met: 0, total: 0 });
+});
+
+test("週番号は日曜はじまりで、1 月 1 日が入っている週を第 1 週にする", () => {
+  assert.deepEqual(sundayWeekNumber("2026-11-18"), { year: 2026, week: 47 });
+  assert.deepEqual(sundayWeekNumber("2026-11-15"), { year: 2026, week: 47 });
+  assert.deepEqual(sundayWeekNumber("2026-11-14"), { year: 2026, week: 46 });
+  assert.deepEqual(sundayWeekNumber("2026-10-25"), { year: 2026, week: 44 });
+  assert.deepEqual(sundayWeekNumber("2025-12-28"), { year: 2026, week: 1 });
+  assert.deepEqual(sundayWeekNumber("2026-01-03"), { year: 2026, week: 1 });
+  assert.deepEqual(sundayWeekNumber("2026-01-04"), { year: 2026, week: 2 });
+  assert.deepEqual(sundayWeekNumber("2026-12-26"), { year: 2026, week: 52 });
+  assert.deepEqual(sundayWeekNumber("2026-12-27"), { year: 2027, week: 1 });
+  assert.deepEqual(sundayWeekNumber("2027-01-02"), { year: 2027, week: 1 });
+  assert.deepEqual(sundayWeekNumber("2028-12-30"), { year: 2028, week: 53 });
+  assert.deepEqual(sundayWeekNumber("2028-12-31"), { year: 2029, week: 1 });
+  assert.equal(createTranslator("ja")("heatmap.weekNumber", { year: 2026, week: 47 }), "2026年 第47週");
+  assert.equal(createTranslator("en")("heatmap.weekNumber", { year: 2026, week: 47 }), "Week 47, 2026");
 });

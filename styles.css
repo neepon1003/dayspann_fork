@@ -881,6 +881,7 @@
   --dayspann-heatmap-cell: 20px;
   --dayspann-heatmap-gap: 4px;
   --dayspann-heatmap-dow-size: 11px;
+  --dayspann-heatmap-weeknum: 16px;
   --dayspann-heatmap-color: var(--color-green, #22c55e);
   margin-top: 6px;
   min-width: 0;
@@ -940,6 +941,31 @@
   background: transparent;
 }
 
+/* 各行の左の週番号。曜日の文字と同じ大きさで、うすい色にする。 */
+.dayspann-heatmap-weeknum {
+  display: flex;
+  flex: 0 0 var(--dayspann-heatmap-weeknum);
+  align-items: center;
+  justify-content: flex-end;
+  width: var(--dayspann-heatmap-weeknum);
+  color: var(--text-faint);
+  font-size: var(--dayspann-heatmap-dow-size);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* 今週の行（いちばん下）。週番号も含めて、行の後ろをうっすら色づけする。外側の影で少しはみ出させ、マスの位置は変えない。 */
+.dayspann-heatmap-week--current {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+}
+
+.dayspann-heatmap-week--current .dayspann-heatmap-weeknum {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 /* 今週の、やる予定でまだやっていないマス。マスの大きさは変えず、内側に緑の枠だけ出す。 */
 .dayspann-heatmap-cell--planned {
   box-shadow: inset 0 0 0 2px var(--dayspann-heatmap-color);
@@ -956,6 +982,7 @@
   --dayspann-heatmap-cell: 16px;
   --dayspann-heatmap-gap: 3px;
   --dayspann-heatmap-dow-size: 10px;
+  --dayspann-heatmap-weeknum: 14px;
 }
 
 /* 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。 */
@@ -1031,7 +1058,7 @@
 .dayspann-habit-stats {
   position: relative;
   display: flex;
-  flex: 1 1 8rem;
+  flex: 1 1 7rem;
   flex-direction: column;
   justify-content: center;
   gap: 6px;
