@@ -63,6 +63,13 @@ import {
   sundayOfDateKey,
 } from "../src/habit-log";
 import {
+  habitTargetProgress,
+  readHabitTarget,
+  readRoutineType,
+  readRoutineWeekdays,
+  readWeekday,
+} from "../src/habit-target";
+import {
   buildNewNoteBody,
   buildNewNoteTitle,
   displayTitle,
@@ -1085,5 +1092,116 @@ test("習慣の数字は単位つきで出し、見出しの言葉を日英で�
   assert.equal(en("heatmap.recentLabel", { days: 30 }), "Last 30 days");
   assert.equal(en("heatmap.streakLabel"), "Streak");
   assert.equal(en("heatmap.bestLabel"), "Best");
+});
+
+test("習慣の目標日数は TaskChute のルーチン設定から数え、決めた曜日以外にやっても週の日数に入れる", () => {
+  assert.equal(readRoutineType(" Daily "), "daily");
+  assert.equal(readRoutineType("WEEKLY"), "weekly");
+  assert.equal(readRoutineType(""), "");
+  assert.equal(readRoutineType(undefined), "");
+
+  assert.equal(readWeekday("tuesday"), 2);
+  assert.equal(readWeekday("Tue"), 2);
+  assert.equal(readWeekday("火"), 2);
+  assert.equal(readWeekday("火曜"), 2);
+  assert.equal(readWeekday(2), 2);
+  assert.equal(readWeekday("5"), 5);
+  assert.equal(readWeekday("金曜日"), 5);
+  assert.equal(readWeekday("日"), 0);
+  assert.equal(readWeekday("土"), 6);
+  assert.equal(readWeekday("maybe"), undefined);
+
+  assert.deepEqual(readRoutineWeekdays({ routine_weekdays: ["tuesday", "friday"] }), [2, 5]);
+  assert.deepEqual(readRoutineWeekdays({ routine_weekdays: ["火", "金"] }), [2, 5]);
+  assert.deepEqual(readRoutineWeekdays({ weekdays: [2, 5], routine_weekday: 2 }), [2, 5]);
+  assert.deepEqual(readRoutineWeekdays({ routine_weekday: 2 }), [2]);
+  assert.deepEqual(readRoutineWeekdays({ weekday: "monday" }), [1]);
+  assert.deepEqual(readRoutineWeekdays({ routine_weekdays: "tuesday, friday" }), [2, 5]);
+  assert.deepEqual(readRoutineWeekdays({ routine_weekdays: [2, 2, 5] }), [2, 5]);
+  assert.deepEqual(readRoutineWeekdays({}), []);
+
+  assert.deepEqual(readHabitTarget({ routine_type: "daily" }), { period: "day", target: 1 });
+  assert.deepEqual(
+    readHabitTarget({ routine_type: "weekly", routine_weekdays: ["tuesday", "friday"] }),
+    { period: "week", target: 2 }
+  );
+  assert.deepEqual(readHabitTarget({ routine_type: "weekly" }), { period: "week", target: 1 });
+  assert.deepEqual(readHabitTarget({ routine_type: "weekly", weekdays: [2, 5] }), { period: "week", target: 2 });
+  assert.deepEqual(readHabitTarget({}), { period: "week", target: 1 });
+  assert.deepEqual(readHabitTarget({ routine_type: "custom" }), { period: "week", target: 1 });
+  assert.deepEqual(readHabitTarget({ routine_type: "weekdays" }), { period: "week", target: 5 });
+  assert.deepEqual(readHabitTarget({ routine_type: "weekends" }), { period: "week", target: 2 });
+  assert.deepEqual(readHabitTarget({ routine_type: "monthly" }), { period: "month", target: 1 });
+  assert.deepEqual(readHabitTarget({ routine_type: "monthly_date" }), { period: "month", target: 1 });
+
+  const today = "2026-11-18";
+  const weekly = { period: "week" as const, target: 2 };
+  // 火曜と金曜の習慣でも、水曜にやれば今週の日数に入る。
+  assert.deepEqual(habitTargetProgress(weekly, { "2026-11-18": 1 }, today), {
+    period: "week",
+    target: 2,
+    done: 1,
+    remaining: 1,
+    met: false,
+  });
+  // 同じ日に何回やっても 1 日。
+  assert.deepEqual(
+    habitTargetProgress(weekly, { "2026-11-16": 3, "2026-11-18": 2 }, today),
+    { period: "week", target: 2, done: 2, remaining: 0, met: true }
+  );
+  // 先週の土曜は、日曜はじまりの今週には入らない。
+  assert.deepEqual(
+    habitTargetProgress(weekly, { "2026-11-14": 1, "2026-11-15": 1 }, today),
+    { period: "week", target: 2, done: 1, remaining: 1, met: false }
+  );
+
+  const weekdays = { period: "week" as const, target: 5 };
+  assert.deepEqual(
+    habitTargetProgress(weekdays, { "2026-11-16": 1, "2026-11-17": 1, "2026-11-18": 1 }, today),
+    { period: "week", target: 5, done: 3, remaining: 2, met: false }
+  );
+  const weekends = { period: "week" as const, target: 2 };
+  assert.deepEqual(
+    habitTargetProgress(weekends, { "2026-11-15": 1 }, today),
+    { period: "week", target: 2, done: 1, remaining: 1, met: false }
+  );
+  assert.equal(habitTargetProgress(weekends, { "2026-11-15": 1, "2026-11-16": 1 }, today).met, true);
+
+  const daily = { period: "day" as const, target: 1 };
+  assert.deepEqual(habitTargetProgress(daily, {}, today), {
+    period: "day",
+    target: 1,
+    done: 0,
+    remaining: 1,
+    met: false,
+  });
+  assert.equal(habitTargetProgress(daily, { "2026-11-18": 1 }, today).met, true);
+  assert.equal(habitTargetProgress(daily, { "2026-11-17": 1 }, today).met, false);
+
+  const monthly = { period: "month" as const, target: 1 };
+  assert.deepEqual(habitTargetProgress(monthly, {}, today), {
+    period: "month",
+    target: 1,
+    done: 0,
+    remaining: 1,
+    met: false,
+  });
+  assert.equal(habitTargetProgress(monthly, { "2026-11-01": 1 }, today).met, true);
+  assert.equal(habitTargetProgress(monthly, { "2026-10-31": 1 }, today).met, false);
+
+  const t = createTranslator("ja");
+  assert.equal(t("habit.pendingToday"), "今日まだ");
+  assert.equal(t("habit.pendingWeek", { done: 1, target: 2 }), "今週 1/2");
+  assert.equal(t("habit.pendingMonth", { done: 0, target: 1 }), "今月 0/1");
+  assert.equal(t("habit.pendingTodayTooltip"), "今日はまだです");
+  assert.equal(t("habit.pendingWeekTooltip", { remaining: 1 }), "今週あと1日");
+  assert.equal(t("habit.pendingMonthTooltip"), "今月はまだです");
+  const en = createTranslator("en");
+  assert.equal(en("habit.pendingToday"), "Not yet today");
+  assert.equal(en("habit.pendingWeek", { done: 1, target: 2 }), "This week 1/2");
+  assert.equal(en("habit.pendingMonth", { done: 0, target: 1 }), "This month 0/1");
+  assert.equal(en("habit.pendingTodayTooltip"), "Not done today yet");
+  assert.equal(en("habit.pendingWeekTooltip", { remaining: 1 }), "1 more this week");
+  assert.equal(en("habit.pendingMonthTooltip"), "Not done this month yet");
 });
 

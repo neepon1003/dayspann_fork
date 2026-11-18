@@ -27,6 +27,7 @@ import {
   streakDays,
   streakWeeks,
 } from "./habit-log";
+import { habitTargetProgress, HabitTargetProgress } from "./habit-target";
 import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
@@ -333,7 +334,7 @@ export class DayspannView extends ItemView {
     });
   }
 
-  /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。 */
+  /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。目標に届いていなければ、名前の左に印と、右に日数を出す。 */
   private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
     if (record.archived) card.addClass("dayspann-card--done");
@@ -361,8 +362,24 @@ export class DayspannView extends ItemView {
     const content = card.createDiv("dayspann-card-content");
     const head = content.createDiv("dayspann-habit-head");
     const headText = head.createDiv("dayspann-habit-head-text");
-    headText.createEl("h3", { text: title });
     const todayKey = this.plugin.todayKey();
+    const counts = logs && record.taskchute && !record.archived
+      ? countHabitDays(logs, {
+          taskId: record.taskchute.taskId,
+          path: record.file.path,
+          basename: record.file.basename,
+        })
+      : null;
+    const pending = counts ? this.habitPendingCopy(habitTargetProgress(record.habitTarget, counts, todayKey)) : null;
+
+    const titleRow = headText.createDiv("dayspann-habit-title");
+    if (pending) {
+      const mark = titleRow.createDiv("dayspann-habit-pending");
+      setIcon(mark, "circle-dashed");
+      setTooltip(mark, pending.tooltip);
+      mark.setAttribute("aria-label", pending.tooltip);
+    }
+    titleRow.createEl("h3", { text: title });
     const updated = formatCompletedCardDate(
       toDateKey(new Date(record.file.stat.mtime)),
       todayKey,
@@ -374,6 +391,9 @@ export class DayspannView extends ItemView {
     });
 
     const headActions = head.createDiv("dayspann-habit-head-actions");
+    if (pending) {
+      headActions.createDiv({ text: pending.text, cls: "dayspann-habit-progress" });
+    }
     const stalled = record.archived
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
@@ -396,18 +416,32 @@ export class DayspannView extends ItemView {
     });
 
     // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
-    if (logs && record.taskchute && !record.archived) {
-      this.renderHeatmap(content, record, logs, todayKey);
+    if (counts) this.renderHeatmap(content, record, counts, todayKey);
+  }
+
+  /** 目標に届いていないときの、名前の横の日数とツールチップ。届いていれば出さない。 */
+  private habitPendingCopy(progress: HabitTargetProgress): { text: string; tooltip: string } | null {
+    if (progress.met) return null;
+    if (progress.period === "day") {
+      return {
+        text: this.plugin.t("habit.pendingToday"),
+        tooltip: this.plugin.t("habit.pendingTodayTooltip"),
+      };
     }
+    if (progress.period === "month") {
+      return {
+        text: this.plugin.t("habit.pendingMonth", { done: progress.done, target: progress.target }),
+        tooltip: this.plugin.t("habit.pendingMonthTooltip"),
+      };
+    }
+    return {
+      text: this.plugin.t("habit.pendingWeek", { done: progress.done, target: progress.target }),
+      tooltip: this.plugin.t("habit.pendingWeekTooltip", { remaining: progress.remaining }),
+    };
   }
 
   /** 習慣のヒートマップ。直近 4 週を左に出し、右に直近 30 日・連続・最長を並べる。 */
-  private renderHeatmap(parent: HTMLElement, record: DayspannRecord, logs: HabitLogDays, todayKey: string): void {
-    const counts = countHabitDays(logs, {
-      taskId: record.taskchute?.taskId,
-      path: record.file.path,
-      basename: record.file.basename,
-    });
+  private renderHeatmap(parent: HTMLElement, record: DayspannRecord, counts: Record<string, number>, todayKey: string): void {
     const body = parent.createDiv("dayspann-habit-body");
     const wrap = body.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
