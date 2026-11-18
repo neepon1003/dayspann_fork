@@ -773,9 +773,8 @@ export class DayspannView extends ItemView {
       menu.showAtMouseEvent(event);
     });
 
-    const accent = card.createDiv("dayspann-card-accent");
+    // 頭文字の四角は出さず、名前をカードの左端から出す（習慣のカードと同じ）。
     const title = displayTitle(record.title);
-    accent.setText(title.slice(0, 1));
 
     const content = card.createDiv("dayspann-card-content");
     content.createEl("h3", { text: title });

@@ -87,16 +87,16 @@ export function generateTaskChuteTaskId(randomUUID: (() => string) | null): stri
   return `tc-task-${timestamp}-${random}`;
 }
 
-/** 新しく登録した記録を TaskChute のタスクにして、今日の一覧に入れるための frontmatter の項目。 */
+/** 新しく登録した記録を TaskChute のタスクにするための frontmatter の項目（target_date は空）。 */
 export interface TaskChuteNewTaskFields {
   target_date: string;
   taskId: string;
   tags: string[];
 }
 
-/** target_date は TaskChute と同じ YYYY-MM-DD（TaskChute は今日の日付と文字のまま比べる）。 */
-export function buildTaskChuteFields(todayKey: string, taskId: string): TaskChuteNewTaskFields {
-  return { target_date: todayKey, taskId, tags: ["task"] };
+/** target_date は空にする（日付を決めずに TaskChute のタスクにする。日付は TaskChute 側で決める）。 */
+export function buildTaskChuteFields(taskId: string): TaskChuteNewTaskFields {
+  return { target_date: "", taskId, tags: ["task"] };
 }
 
 /**

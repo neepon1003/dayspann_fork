@@ -231,7 +231,7 @@
 .dayspann-card {
   position: relative;
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   min-height: 92px;
@@ -249,19 +249,6 @@
   background: color-mix(in srgb, var(--dayspann-accent) 10%, var(--background-modifier-hover));
   outline: none;
   transform: translateY(-1px);
-}
-
-.dayspann-card-accent {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--dayspann-accent) 20%, var(--background-secondary));
-  color: var(--dayspann-accent);
-  font-size: 1.35rem;
-  font-weight: 750;
 }
 
 .dayspann-card-content {
@@ -640,18 +627,11 @@
   }
 
   .dayspann-card {
-    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
     min-height: 80px;
     padding: 10px 6px 10px 10px;
     border-radius: 12px;
-  }
-
-  .dayspann-card-accent {
-    width: 48px;
-    height: 58px;
-    border-radius: 10px;
-    font-size: 1.1rem;
   }
 
   .dayspann-card-excerpt {
@@ -717,16 +697,11 @@
 /* 狭い表示では、タイトルを横幅いっぱいに使い、日数とボタンをその下の1行に並べる。 */
 .dayspann-view.dayspann-is-narrow .dayspann-card {
   grid-template-areas:
-    "accent content"
-    "accent countrow";
-  grid-template-columns: 52px minmax(0, 1fr);
+    "content"
+    "countrow";
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
   row-gap: 6px;
-}
-
-.dayspann-view.dayspann-is-narrow .dayspann-card-accent {
-  grid-area: accent;
-  align-self: start;
 }
 
 .dayspann-view.dayspann-is-narrow .dayspann-card-content {
@@ -736,13 +711,6 @@
 .dayspann-view.dayspann-is-narrow .dayspann-count-row {
   grid-area: countrow;
   justify-content: space-between;
-}
-
-.dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card-accent {
-  width: 52px;
-  height: 58px;
-  border-radius: 10px;
-  font-size: 1.1rem;
 }
 
 .dayspann-view.dayspann-is-narrow:not(.dayspann-is-extra-narrow) .dayspann-card-excerpt {
@@ -785,16 +753,10 @@
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card {
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 5px 8px;
   min-height: 72px;
   padding: 9px 5px 9px 8px;
-}
-
-.dayspann-view.dayspann-is-extra-narrow .dayspann-card-accent {
-  width: 40px;
-  height: 46px;
-  font-size: 1rem;
 }
 
 .dayspann-view.dayspann-is-extra-narrow .dayspann-card .dayspann-card-content h3 {

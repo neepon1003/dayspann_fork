@@ -467,15 +467,18 @@ test("編集の保存で goal を書き、空なら goal の項目を消す（Ta
   assert.equal(frontmatter.type, "dayspann");
 });
 
-test("新しく登録した記録のTaskChuteの項目は、今日の target_date・taskId・tags: [task]", () => {
-  const fields = buildTaskChuteFields("2026-11-15", "tc-task-1234");
-  assert.deepEqual(fields, { target_date: "2026-11-15", taskId: "tc-task-1234", tags: ["task"] });
-  // PJ-span の読み方でも TaskChute のタスクで、今日の一覧に入っている形になる
+test("新しく登録した記録のTaskChuteの項目は、空の target_date・taskId・tags: [task]", () => {
+  const fields = buildTaskChuteFields("tc-task-1234");
+  assert.deepEqual(fields, { target_date: "", taskId: "tc-task-1234", tags: ["task"] });
+  // PJ-span の読み方でも TaskChute のタスクで、日付は無い（今日の一覧に入っていない）形になる
   assert.equal(isTaskChuteTask(fields as unknown as Record<string, unknown>), true);
-  assert.equal(readTargetDate(fields.target_date), "2026-11-15");
+  assert.equal(readTargetDate(fields.target_date), undefined);
   assert.equal(
-    planCardActions({ archived: false, date: "2026-12-22", taskchute: { targetDate: fields.target_date } }, "2026-11-15").today,
-    "inToday"
+    planCardActions(
+      { archived: false, date: "2026-12-22", taskchute: { targetDate: readTargetDate(fields.target_date) } },
+      "2026-11-15"
+    ).today,
+    "add"
   );
 });
 
@@ -1411,5 +1414,16 @@ test("週の連続と最長は、目標日数に届いた週だけを数え、�
 
   // 目標を省略したときは、これまでどおり 1 日でもその週は続く。
   assert.deepEqual(streakWeeks({ "2026-11-17": 1 }, today), { current: 1, longest: 1 });
+});
+
+test("＋で登録したときのお知らせは、TaskChuteのタスクにしたことと、日付が空なことを伝える", () => {
+  assert.equal(
+    createTranslator("ja")("notice.registeredTaskChute"),
+    "PJ-spanに登録して、TaskChuteのタスクにしました（日付は空のままです）"
+  );
+  assert.equal(
+    createTranslator("en")("notice.registeredTaskChute"),
+    "Added to PJ-span as a TaskChute task (no target date)."
+  );
 });
 

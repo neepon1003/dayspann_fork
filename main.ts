@@ -735,7 +735,7 @@ export default class DayspannPlugin extends Plugin {
 
   /**
    * 新しい記録を作ってお知らせを出す。
-   * TaskChute が有効なら、TaskChute のタスク（今日の一覧に入る）としても作り、TaskChute の画面が開いていれば読み直す。
+   * TaskChute が有効なら、TaskChute のタスク（target_date は空）としても作る。
    */
   private async registerRecord(draft: DayspannDraft): Promise<void> {
     const emptyFields = emptyRequiredFields(draft);
@@ -769,17 +769,15 @@ export default class DayspannPlugin extends Plugin {
     const taskFolder = getTaskChuteTaskFolder(host);
     const { folder, visibleToTaskChute } = chooseNewRecordFolder(this.normalizedStorageFolder(), taskFolder);
     if (!visibleToTaskChute) {
-      // TaskChute から見えない場所にタスクの項目だけ書いても今日の一覧には出ないので、今までどおりの記録にする。
+      // TaskChute から見えない場所にタスクの項目だけ書いても TaskChute には出ないので、今までどおりの記録にする。
       await this.createRecord(draft, folder);
       new Notice(this.t("notice.registeredOutsideTaskChute", { folder: taskFolder }));
       return;
     }
 
-    const today = this.todayKey();
-    const taskchute = buildTaskChuteFields(today, generateTaskChuteTaskId(this.randomUUID()));
-    const file = await this.createRecord(draft, folder, taskchute);
-    new Notice(this.t("notice.registeredToday"));
-    await this.reloadTaskChuteView(file, today);
+    const taskchute = buildTaskChuteFields(generateTaskChuteTaskId(this.randomUUID()));
+    await this.createRecord(draft, folder, taskchute);
+    new Notice(this.t("notice.registeredTaskChute"));
   }
 
   /** PJ-span の記録フォルダと TaskChute のタスクフォルダから、同じ名前の完了していないノートを探す。 */
