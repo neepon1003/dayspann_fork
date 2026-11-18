@@ -29,7 +29,13 @@ import {
   streakWeeks,
   sundayOfDateKey,
 } from "./habit-log";
-import { habitTargetProgress, HabitTargetProgress, isHabitScheduled, weekStreakTarget } from "./habit-target";
+import {
+  habitTargetProgress,
+  HabitTargetProgress,
+  isHabitScheduled,
+  sortHabitsByPending,
+  weekStreakTarget,
+} from "./habit-target";
 import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
@@ -239,7 +245,10 @@ export class DayspannView extends ItemView {
     }
   }
 
-  /** 習慣のタブ。続けている習慣を名前の順に並べ、分類があれば見出しごとにまとめ、アーカイブした習慣はいちばん下に月ごとにまとめる。 */
+  /**
+   * 習慣のタブ。続けている習慣を、まだ目標に届いていないものから名前の順に並べ、分類があれば見出しごとにまとめ、
+   * アーカイブした習慣はいちばん下に月ごとにまとめる。
+   */
   private renderHabits(
     root: HTMLElement,
     records: DayspannRecord[],
@@ -259,9 +268,11 @@ export class DayspannView extends ItemView {
       return;
     }
 
-    const active = records
+    const byName = records
       .filter((record) => !record.archived)
       .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
+    // まだ目標に届いていない習慣を上に、届いた習慣（✓）を下にする。見出しの中でも、この順番のまま並ぶ。
+    const active = sortHabitsByPending(byName, (record) => this.habitMet(record, logs, todayKey));
     if (active.length) {
       const groups = groupHabitsByCategory(active);
       const useCategories = groups.some((group) => group.category);
@@ -417,6 +428,20 @@ export class DayspannView extends ItemView {
 
     // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
     if (counts) this.renderHeatmap(content, record, counts, todayKey);
+  }
+
+  /**
+   * 名前の横の日数と同じ決め方で、今の期間の目標に届いているかを返す。
+   * 日数を出さない習慣（TaskChute とつながっていないなど）は null。
+   */
+  private habitMet(record: DayspannRecord, logs: HabitLogDays, todayKey: string): boolean | null {
+    if (!record.taskchute || record.archived) return null;
+    const counts = countHabitDays(logs, {
+      taskId: record.taskchute.taskId,
+      path: record.file.path,
+      basename: record.file.basename,
+    });
+    return habitTargetProgress(record.habitTarget, counts, todayKey).met;
   }
 
   /** 名前の横の日数とツールチップ。目標に届いていれば ✓ を付けて出す。 */

@@ -340,3 +340,16 @@ export function plannedDateKeysInWeek(schedule: HabitSchedule, todayKey: string)
   }
   return keys;
 }
+
+/**
+ * 習慣を、まだ目標に届いていないものから並べる。
+ * isMet が false（まだ）→ null（日数を出していない）→ true（届いた）の順にする。
+ * 同じ中では、渡されたときの順番（名前の順）を保つ。
+ */
+export function sortHabitsByPending<T>(items: T[], isMet: (item: T) => boolean | null): T[] {
+  const rank = (met: boolean | null): number => (met === false ? 0 : met === null ? 1 : 2);
+  return items
+    .map((item, index) => ({ item, index, rank: rank(isMet(item)) }))
+    .sort((left, right) => left.rank - right.rank || left.index - right.index)
+    .map(({ item }) => item);
+}

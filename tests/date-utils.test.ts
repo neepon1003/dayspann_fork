@@ -73,6 +73,7 @@ import {
   readRoutineType,
   readRoutineWeekdays,
   readWeekday,
+  sortHabitsByPending,
   weekStreakTarget,
 } from "../src/habit-target";
 import {
@@ -1425,5 +1426,25 @@ test("＋で登録したときのお知らせは、TaskChuteのタスクにし�
     createTranslator("en")("notice.registeredTaskChute"),
     "Added to PJ-span as a TaskChute task (no target date)."
   );
+});
+
+test("sortHabitsByPending puts habits not yet at their target first and keeps name order", () => {
+  const habits = [
+    { title: "A腹筋", met: true },
+    { title: "B読書", met: false },
+    { title: "C水を飲む", met: null },
+    { title: "Dスクワット", met: false },
+    { title: "E腕立て", met: true },
+    { title: "F日記", met: null },
+  ];
+  assert.deepEqual(
+    sortHabitsByPending(habits, (habit) => habit.met).map((habit) => habit.title),
+    ["B読書", "Dスクワット", "C水を飲む", "F日記", "A腹筋", "E腕立て"]
+  );
+  assert.deepEqual(
+    habits.map((habit) => habit.title),
+    ["A腹筋", "B読書", "C水を飲む", "Dスクワット", "E腕立て", "F日記"]
+  );
+  assert.deepEqual(sortHabitsByPending([], () => false), []);
 });
 
