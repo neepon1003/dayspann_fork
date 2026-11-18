@@ -1208,6 +1208,23 @@ test("習慣の目標日数は TaskChute のルーチン設定から数え、決
   assert.equal(en("habit.pendingTodayTooltip"), "Not done today yet");
   assert.equal(en("habit.pendingWeekTooltip", { remaining: 1 }), "1 more this week");
   assert.equal(en("habit.pendingMonthTooltip"), "Not done this month yet");
+  assert.equal(t("habit.doneToday"), "今日 ✓");
+  assert.equal(t("habit.doneWeek", { done: 2, target: 2 }), "今週 2/2 ✓");
+  assert.equal(t("habit.doneWeek", { done: 3, target: 2 }), "今週 3/2 ✓");
+  assert.equal(t("habit.doneMonth", { done: 1, target: 1 }), "今月 1/1 ✓");
+  assert.equal(t("habit.doneTodayTooltip"), "今日やりました");
+  assert.equal(t("habit.doneWeekTooltip"), "今週の目標を達成しました");
+  assert.equal(t("habit.doneMonthTooltip"), "今月の目標を達成しました");
+  assert.equal(en("habit.doneToday"), "Today ✓");
+  assert.equal(en("habit.doneWeek", { done: 2, target: 2 }), "This week 2/2 ✓");
+  assert.equal(en("habit.doneWeek", { done: 3, target: 2 }), "This week 3/2 ✓");
+  assert.equal(en("habit.doneMonth", { done: 1, target: 1 }), "This month 1/1 ✓");
+  assert.equal(en("habit.doneTodayTooltip"), "Done today");
+  assert.equal(en("habit.doneWeekTooltip"), "This week's goal is met");
+  assert.equal(en("habit.doneMonthTooltip"), "This month's goal is met");
+
+  const over = habitTargetProgress(weekly, { "2026-11-16": 1, "2026-11-17": 1, "2026-11-18": 1 }, today);
+  assert.deepEqual(over, { period: "week", target: 2, done: 3, remaining: 0, met: true });
 });
 
 test("ヒートマップの今週は、ルーチンの予定日だけ枠を付ける対象になる", () => {

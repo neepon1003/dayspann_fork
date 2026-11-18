@@ -336,7 +336,7 @@ export class DayspannView extends ItemView {
     });
   }
 
-  /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。目標に届いていなければ、名前の左に印と、右に日数を出す。 */
+  /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。名前の右に、今の期間の日数を出す。 */
   private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
     if (record.archived) card.addClass("dayspann-card--done");
@@ -372,16 +372,9 @@ export class DayspannView extends ItemView {
           basename: record.file.basename,
         })
       : null;
-    const pending = counts ? this.habitPendingCopy(habitTargetProgress(record.habitTarget, counts, todayKey)) : null;
+    const progress = counts ? this.habitProgressCopy(habitTargetProgress(record.habitTarget, counts, todayKey)) : null;
 
-    const titleRow = headText.createDiv("dayspann-habit-title");
-    if (pending) {
-      const mark = titleRow.createDiv("dayspann-habit-pending");
-      setIcon(mark, "circle-dashed");
-      setTooltip(mark, pending.tooltip);
-      mark.setAttribute("aria-label", pending.tooltip);
-    }
-    titleRow.createEl("h3", { text: title });
+    headText.createEl("h3", { text: title });
     const updated = formatCompletedCardDate(
       toDateKey(new Date(record.file.stat.mtime)),
       todayKey,
@@ -393,8 +386,13 @@ export class DayspannView extends ItemView {
     });
 
     const headActions = head.createDiv("dayspann-habit-head-actions");
-    if (pending) {
-      headActions.createDiv({ text: pending.text, cls: "dayspann-habit-progress" });
+    if (progress) {
+      const progressEl = headActions.createDiv({
+        text: progress.text,
+        cls: progress.met ? "dayspann-habit-progress is-met" : "dayspann-habit-progress",
+      });
+      setTooltip(progressEl, progress.tooltip);
+      progressEl.setAttribute("aria-label", progress.tooltip);
     }
     const stalled = record.archived
       ? null
@@ -421,24 +419,41 @@ export class DayspannView extends ItemView {
     if (counts) this.renderHeatmap(content, record, counts, todayKey);
   }
 
-  /** 目標に届いていないときの、名前の横の日数とツールチップ。届いていれば出さない。 */
-  private habitPendingCopy(progress: HabitTargetProgress): { text: string; tooltip: string } | null {
-    if (progress.met) return null;
+  /** 名前の横の日数とツールチップ。目標に届いていれば ✓ を付けて出す。 */
+  private habitProgressCopy(progress: HabitTargetProgress): { text: string; tooltip: string; met: boolean } {
     if (progress.period === "day") {
-      return {
-        text: this.plugin.t("habit.pendingToday"),
-        tooltip: this.plugin.t("habit.pendingTodayTooltip"),
-      };
+      return progress.met
+        ? {
+            text: this.plugin.t("habit.doneToday"),
+            tooltip: this.plugin.t("habit.doneTodayTooltip"),
+            met: true,
+          }
+        : {
+            text: this.plugin.t("habit.pendingToday"),
+            tooltip: this.plugin.t("habit.pendingTodayTooltip"),
+            met: false,
+          };
     }
     if (progress.period === "month") {
       return {
-        text: this.plugin.t("habit.pendingMonth", { done: progress.done, target: progress.target }),
-        tooltip: this.plugin.t("habit.pendingMonthTooltip"),
+        text: this.plugin.t(progress.met ? "habit.doneMonth" : "habit.pendingMonth", {
+          done: progress.done,
+          target: progress.target,
+        }),
+        tooltip: this.plugin.t(progress.met ? "habit.doneMonthTooltip" : "habit.pendingMonthTooltip"),
+        met: progress.met,
       };
     }
     return {
-      text: this.plugin.t("habit.pendingWeek", { done: progress.done, target: progress.target }),
-      tooltip: this.plugin.t("habit.pendingWeekTooltip", { remaining: progress.remaining }),
+      text: this.plugin.t(progress.met ? "habit.doneWeek" : "habit.pendingWeek", {
+        done: progress.done,
+        target: progress.target,
+      }),
+      tooltip: this.plugin.t(
+        progress.met ? "habit.doneWeekTooltip" : "habit.pendingWeekTooltip",
+        { remaining: progress.remaining }
+      ),
+      met: progress.met,
     };
   }
 
