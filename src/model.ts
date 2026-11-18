@@ -8,7 +8,7 @@ import {
 } from "./date-utils";
 import { buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
 import { readStreakUnit, StreakUnit } from "./habit-log";
-import { HabitTarget, readHabitTarget } from "./habit-target";
+import { HabitSchedule, HabitTarget, readHabitSchedule, readHabitTarget } from "./habit-target";
 import { readCategory } from "./habit-category";
 import { readGoal } from "./record-edit";
 import { DEFAULT_RECORD_TYPE, readRecordType, RecordType } from "./record-type";
@@ -29,6 +29,8 @@ export interface DayspannRecord {
   streakUnit: StreakUnit;
   /** 今の期間の目標日数。TaskChute の routine_type と曜日の指定から決める。 */
   habitTarget: HabitTarget;
+  /** ヒートマップに枠を付ける予定日の決め方。TaskChute のルーチン設定から読む。 */
+  habitSchedule: HabitSchedule;
   displayMode: DayspannDisplayMode;
   archived: boolean;
   completed?: string;
@@ -132,6 +134,7 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
     category: readCategory(data.category),
     streakUnit: readStreakUnit(data.routine_type),
     habitTarget: readHabitTarget(data),
+    habitSchedule: readHabitSchedule(data),
     displayMode: normalizeDisplayMode(data.display),
     archived: data.archived === true,
     completed: readDateKey(data.completed) || undefined,

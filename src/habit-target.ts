@@ -1,4 +1,4 @@
-import { parseDateKey } from "./date-utils";
+import { parseDateKey, shiftDateKey } from "./date-utils";
 import { sundayOfDateKey } from "./habit-log";
 
 /**
@@ -154,4 +154,183 @@ export function habitTargetProgress(
   const done = countDistinctDays(counts, startKey, todayKey);
   const remaining = Math.max(0, target.target - done);
   return { ...target, done, remaining, met: done >= target.target };
+}
+
+/** その日がルーチンの予定日かどうか。設定が無い・わからないときは none。 */
+export type HabitSchedule =
+  | { kind: "none" }
+  | { kind: "daily" }
+  | { kind: "weekly"; weekdays: number[] }
+  | { kind: "monthDate"; days: Array<number | "last"> }
+  | { kind: "monthNth"; weeks: Array<number | "last">; weekdays: number[] };
+
+function weekdayOfDateKey(dateKey: string): number | undefined {
+  const date = parseDateKey(dateKey);
+  if (!date) return undefined;
+  return new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function uniqueWeekdaysFromKeys(data: Record<string, unknown>, keys: string[]): number[] {
+  const collected: unknown[] = [];
+  for (const key of keys) collectWeekdayValues(data[key], collected);
+  const seen = new Set<number>();
+  const weekdays: number[] = [];
+  for (const item of collected) {
+    const weekday = readWeekday(item);
+    if (weekday === undefined || seen.has(weekday)) continue;
+    seen.add(weekday);
+    weekdays.push(weekday);
+  }
+  return weekdays;
+}
+
+function readMonthDayValue(value: unknown): number | "last" | undefined {
+  if (typeof value === "string") {
+    const raw = value.trim().toLowerCase();
+    if (raw === "last") return "last";
+    value = raw;
+  }
+  const asNumber = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= 31) return asNumber;
+  return undefined;
+}
+
+function collectMonthDays(value: unknown, collected: Array<number | "last">, seen: Set<string>): void {
+  if (value === undefined || value === null || value === "") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectMonthDays(item, collected, seen);
+    return;
+  }
+  if (typeof value === "string" && /[,、]/.test(value)) {
+    for (const item of value.split(/[,、]/)) collectMonthDays(item, collected, seen);
+    return;
+  }
+  const day = readMonthDayValue(value);
+  if (day === undefined) return;
+  const key = String(day);
+  if (seen.has(key)) return;
+  seen.add(key);
+  collected.push(day);
+}
+
+/** 毎月（日付）の指定。routine_monthday / routine_monthdays。1〜31 または last。 */
+export function readMonthDays(data: Record<string, unknown> | undefined): Array<number | "last"> {
+  if (!data) return [];
+  const days: Array<number | "last"> = [];
+  const seen = new Set<string>();
+  collectMonthDays(data.routine_monthdays, days, seen);
+  collectMonthDays(data.routine_monthday, days, seen);
+  return days;
+}
+
+function readMonthWeekValue(value: unknown, zeroBased = false): number | "last" | undefined {
+  if (typeof value === "string") {
+    const raw = value.trim().toLowerCase();
+    if (raw === "last") return "last";
+    value = raw;
+  }
+  const asNumber = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  if (!Number.isInteger(asNumber)) return undefined;
+  if (zeroBased) return asNumber >= 0 && asNumber <= 4 ? asNumber + 1 : undefined;
+  return asNumber >= 1 && asNumber <= 5 ? asNumber : undefined;
+}
+
+function collectMonthWeeks(
+  value: unknown,
+  collected: Array<number | "last">,
+  seen: Set<string>,
+  zeroBased = false
+): void {
+  if (value === undefined || value === null || value === "") return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectMonthWeeks(item, collected, seen, zeroBased);
+    return;
+  }
+  const week = readMonthWeekValue(value, zeroBased);
+  if (week === undefined) return;
+  const key = String(week);
+  if (seen.has(key)) return;
+  seen.add(key);
+  collected.push(week);
+}
+
+/** 毎月（第n曜日）の週。routine_week / routine_weeks は 1〜5 または last。古い monthly_week だけ 0〜4。 */
+export function readMonthWeeks(data: Record<string, unknown> | undefined): Array<number | "last"> {
+  if (!data) return [];
+  const weeks: Array<number | "last"> = [];
+  const seen = new Set<string>();
+  collectMonthWeeks(data.routine_weeks, weeks, seen);
+  collectMonthWeeks(data.routine_week, weeks, seen);
+  collectMonthWeeks(data.monthly_weeks, weeks, seen);
+  collectMonthWeeks(data.monthly_week, weeks, seen, true);
+  return weeks;
+}
+
+/**
+ * TaskChute のルーチン設定から、予定日の決め方を読む。
+ * 設定が無いとき、種類がわからないとき、曜日や日付が無い weekly / monthly は none（枠を付けない）。
+ * routine_interval や開始・終了日は見ない。
+ */
+export function readHabitSchedule(data: Record<string, unknown> | undefined): HabitSchedule {
+  const type = readRoutineType(data?.routine_type);
+  if (type === "daily") return { kind: "daily" };
+  if (type === "weekdays") return { kind: "weekly", weekdays: [1, 2, 3, 4, 5] };
+  if (type === "weekends") return { kind: "weekly", weekdays: [0, 6] };
+  if (type === "weekly") {
+    const weekdays = readRoutineWeekdays(data);
+    return weekdays.length > 0 ? { kind: "weekly", weekdays } : { kind: "none" };
+  }
+  if (type === "monthly_date") {
+    const days = readMonthDays(data);
+    return days.length > 0 ? { kind: "monthDate", days } : { kind: "none" };
+  }
+  if (type === "monthly") {
+    const weeks = readMonthWeeks(data);
+    const weekdays = uniqueWeekdaysFromKeys(data ?? {}, [
+      "routine_weekdays",
+      "monthly_weekdays",
+      "routine_weekday",
+      "monthly_weekday",
+      "weekday",
+    ]);
+    return weeks.length > 0 && weekdays.length > 0 ? { kind: "monthNth", weeks, weekdays } : { kind: "none" };
+  }
+  return { kind: "none" };
+}
+
+/** その日がルーチンの予定日なら true。日付が不正なときや kind が none のときは false。 */
+export function isHabitScheduled(schedule: HabitSchedule, dateKey: string): boolean {
+  const date = parseDateKey(dateKey);
+  if (!date || schedule.kind === "none") return false;
+  const weekday = weekdayOfDateKey(dateKey);
+  if (weekday === undefined) return false;
+  if (schedule.kind === "daily") return true;
+  if (schedule.kind === "weekly") return schedule.weekdays.includes(weekday);
+  if (schedule.kind === "monthDate") {
+    const last = lastDayOfMonth(date.year, date.month);
+    return schedule.days.some((day) => (day === "last" ? date.day === last : date.day === day));
+  }
+  const last = date.day + 7 > lastDayOfMonth(date.year, date.month);
+  const occurrence = Math.floor((date.day - 1) / 7) + 1;
+  const weekMatches = schedule.weeks.some((week) => (week === "last" ? last : week === occurrence));
+  return weekMatches && schedule.weekdays.includes(weekday);
+}
+
+/**
+ * 日曜はじまりの今週（今日より先の日も含む）のうち、予定日の YYYY-MM-DD を返す。
+ * ヒートマップの一番下の行に枠を付ける対象。
+ */
+export function plannedDateKeysInWeek(schedule: HabitSchedule, todayKey: string): string[] {
+  if (schedule.kind === "none") return [];
+  const sunday = sundayOfDateKey(todayKey);
+  const keys: string[] = [];
+  for (let day = 0; day < 7; day += 1) {
+    const dateKey = shiftDateKey(sunday, day);
+    if (isHabitScheduled(schedule, dateKey)) keys.push(dateKey);
+  }
+  return keys;
 }

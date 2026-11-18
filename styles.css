@@ -973,6 +973,11 @@
   background: transparent;
 }
 
+/* 今週の、やる予定でまだやっていないマス。マスの大きさは変えず、内側に緑の枠だけ出す。 */
+.dayspann-heatmap-cell--planned {
+  box-shadow: inset 0 0 0 2px var(--dayspann-heatmap-color);
+}
+
 .dayspann-heatmap-summary {
   margin-top: 4px;
   color: var(--text-muted);

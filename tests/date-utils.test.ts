@@ -64,7 +64,12 @@ import {
 } from "../src/habit-log";
 import {
   habitTargetProgress,
+  isHabitScheduled,
+  plannedDateKeysInWeek,
+  readHabitSchedule,
   readHabitTarget,
+  readMonthDays,
+  readMonthWeeks,
   readRoutineType,
   readRoutineWeekdays,
   readWeekday,
@@ -1203,5 +1208,101 @@ test("習慣の目標日数は TaskChute のルーチン設定から数え、決
   assert.equal(en("habit.pendingTodayTooltip"), "Not done today yet");
   assert.equal(en("habit.pendingWeekTooltip", { remaining: 1 }), "1 more this week");
   assert.equal(en("habit.pendingMonthTooltip"), "Not done this month yet");
+});
+
+test("ヒートマップの今週は、ルーチンの予定日だけ枠を付ける対象になる", () => {
+  const today = "2026-11-18";
+  assert.deepEqual(readHabitSchedule({}), { kind: "none" });
+  assert.deepEqual(readHabitSchedule({ routine_type: "custom" }), { kind: "none" });
+  assert.deepEqual(readHabitSchedule({ routine_type: "weekly" }), { kind: "none" });
+  assert.deepEqual(readHabitSchedule({ routine_type: "daily" }), { kind: "daily" });
+  assert.deepEqual(readHabitSchedule({ routine_type: "weekdays" }), {
+    kind: "weekly",
+    weekdays: [1, 2, 3, 4, 5],
+  });
+  assert.deepEqual(readHabitSchedule({ routine_type: "weekends" }), { kind: "weekly", weekdays: [0, 6] });
+  assert.deepEqual(
+    readHabitSchedule({ routine_type: "weekly", routine_weekdays: ["tuesday", "friday"] }),
+    { kind: "weekly", weekdays: [2, 5] }
+  );
+  assert.deepEqual(
+    readHabitSchedule({ routine_type: "weekly", weekdays: [2, 5], routine_weekday: 2 }),
+    { kind: "weekly", weekdays: [2, 5] }
+  );
+
+  const daily = readHabitSchedule({ routine_type: "daily" });
+  assert.deepEqual(plannedDateKeysInWeek(daily, today), [
+    "2026-11-15",
+    "2026-11-16",
+    "2026-11-17",
+    "2026-11-18",
+    "2026-11-19",
+    "2026-11-20",
+    "2026-11-21",
+  ]);
+
+  const weekly = readHabitSchedule({ routine_type: "weekly", routine_weekdays: ["火", "金"] });
+  assert.deepEqual(plannedDateKeysInWeek(weekly, today), ["2026-11-17", "2026-11-20"]);
+  assert.equal(isHabitScheduled(weekly, "2026-11-17"), true);
+  assert.equal(isHabitScheduled(weekly, "2026-11-18"), false);
+  assert.equal(isHabitScheduled(weekly, "2026-11-20"), true);
+  // 今日より先の予定日も、今週の対象に入る。
+  assert.equal(plannedDateKeysInWeek(weekly, today).includes("2026-11-20"), true);
+  // 先週の同じ曜日は入らない。
+  assert.equal(plannedDateKeysInWeek(weekly, today).includes("2026-11-13"), false);
+
+  const weekdays = readHabitSchedule({ routine_type: "weekdays" });
+  assert.deepEqual(plannedDateKeysInWeek(weekdays, today), [
+    "2026-11-16",
+    "2026-11-17",
+    "2026-11-18",
+    "2026-11-19",
+    "2026-11-20",
+  ]);
+  const weekends = readHabitSchedule({ routine_type: "weekends" });
+  assert.deepEqual(plannedDateKeysInWeek(weekends, today), ["2026-11-15", "2026-11-21"]);
+
+  assert.deepEqual(readMonthDays({ routine_monthday: 18 }), [18]);
+  assert.deepEqual(readMonthDays({ routine_monthdays: [18, "last"] }), [18, "last"]);
+  const monthDate = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: 18 });
+  assert.deepEqual(plannedDateKeysInWeek(monthDate, today), ["2026-11-18"]);
+  const monthDateNext = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: 22 });
+  assert.deepEqual(plannedDateKeysInWeek(monthDateNext, today), []);
+  const monthLast = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: "last" });
+  assert.deepEqual(plannedDateKeysInWeek(monthLast, today), []);
+  assert.deepEqual(plannedDateKeysInWeek(monthLast, "2026-11-29"), ["2026-11-30"]);
+
+  assert.deepEqual(readMonthWeeks({ routine_week: 3 }), [3]);
+  assert.deepEqual(readMonthWeeks({ routine_weeks: [3, "last"] }), [3, "last"]);
+  assert.deepEqual(readMonthWeeks({ monthly_week: 2 }), [3]);
+  const monthNth = readHabitSchedule({
+    routine_type: "monthly",
+    routine_week: 3,
+    routine_weekday: "tuesday",
+  });
+  // 2026年11月の第3火曜日は 17 日。
+  assert.deepEqual(plannedDateKeysInWeek(monthNth, today), ["2026-11-17"]);
+  const monthLastFriday = readHabitSchedule({
+    routine_type: "monthly",
+    routine_week: "last",
+    routine_weekday: 5,
+  });
+  assert.deepEqual(plannedDateKeysInWeek(monthLastFriday, today), []);
+  assert.deepEqual(plannedDateKeysInWeek(monthLastFriday, "2026-11-25"), ["2026-11-27"]);
+  const monthLegacy = readHabitSchedule({
+    routine_type: "monthly",
+    monthly_week: 2,
+    monthly_weekday: 2,
+  });
+  assert.deepEqual(plannedDateKeysInWeek(monthLegacy, today), ["2026-11-17"]);
+
+  const none = readHabitSchedule({});
+  assert.deepEqual(plannedDateKeysInWeek(none, today), []);
+  assert.equal(isHabitScheduled(none, "2026-11-18"), false);
+
+  const t = createTranslator("ja");
+  assert.equal(t("heatmap.planned", { label: "11月19日：やっていません" }), "11月19日：やっていません・予定");
+  const en = createTranslator("en");
+  assert.equal(en("heatmap.planned", { label: "Nov 19: not done" }), "Nov 19: not done · Planned");
 });
 

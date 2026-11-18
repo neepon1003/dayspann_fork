@@ -14,6 +14,7 @@ import {
   groupByMonth,
   monthKey,
   postponeTargets,
+  shiftDateKey,
   stalledDays,
   toDateKey,
 } from "./date-utils";
@@ -26,8 +27,9 @@ import {
   heatmapLevel,
   streakDays,
   streakWeeks,
+  sundayOfDateKey,
 } from "./habit-log";
-import { habitTargetProgress, HabitTargetProgress } from "./habit-target";
+import { habitTargetProgress, HabitTargetProgress, isHabitScheduled } from "./habit-target";
 import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
@@ -453,20 +455,32 @@ export class DayspannView extends ItemView {
       if (index === 6) cls.push("is-saturday");
       header.createDiv({ text: weekdays[index], cls: cls.join(" ") });
     }
-    for (const week of buildHeatmapWeeks(todayKey)) {
+    const weeks = buildHeatmapWeeks(todayKey);
+    const thisSunday = sundayOfDateKey(todayKey);
+    for (const [weekIndex, week] of weeks.entries()) {
+      const isThisWeek = weekIndex === weeks.length - 1;
       const row = grid.createDiv("dayspann-heatmap-week");
-      for (const dateKey of week) {
+      for (let day = 0; day < week.length; day += 1) {
+        const raw = week[day];
+        const dateKey = raw ?? (isThisWeek ? shiftDateKey(thisSunday, day) : null);
         const cell = row.createDiv("dayspann-heatmap-cell");
         if (!dateKey) {
           cell.addClass("dayspann-heatmap-cell--future");
           continue;
         }
+        const future = raw === null;
         const count = counts[dateKey] ?? 0;
-        cell.addClass(`dayspann-heatmap-cell--${heatmapLevel(count)}`);
+        if (future) cell.addClass("dayspann-heatmap-cell--future");
+        else cell.addClass(`dayspann-heatmap-cell--${heatmapLevel(count)}`);
+        const planned = isThisWeek && isHabitScheduled(record.habitSchedule, dateKey);
+        // 予定でまだやっていない日（今日より先も含む）だけ枠を付ける。やった日は緑のまま。
+        if (planned && (future || count === 0)) cell.addClass("dayspann-heatmap-cell--planned");
+        if (future && !planned) continue;
         const date = formatCompletedCardDate(dateKey, todayKey, this.plugin.locale());
-        const label = count > 0
+        let label = count > 0
           ? this.plugin.t("heatmap.done", { date, count })
           : this.plugin.t("heatmap.none", { date });
+        if (planned) label = this.plugin.t("heatmap.planned", { label });
         setTooltip(cell, label);
         cell.setAttribute("aria-label", label);
       }
