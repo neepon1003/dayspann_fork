@@ -45,3 +45,24 @@ export function groupHabitsByCategory<T extends { category?: string }>(
   if (uncategorized.length) groups.push({ category: "", items: uncategorized });
   return groups;
 }
+
+/**
+ * 「今日」表示用。今日やった習慣と、まだの習慣を分ける。
+ * 渡された順番を、まだのほうではそのまま保つ。
+ * 完了のほうは、分類の順（名前順。分類なしは最後）のあと、渡されたときの順番（名前の順）にする。
+ */
+export function partitionHabitsDoneToday<T extends { category?: string }>(
+  habits: T[],
+  doneToday: (item: T) => boolean
+): { pending: T[]; done: T[] } {
+  const pending: T[] = [];
+  const doneSource: T[] = [];
+  for (const habit of habits) {
+    if (doneToday(habit)) doneSource.push(habit);
+    else pending.push(habit);
+  }
+  return {
+    pending,
+    done: groupHabitsByCategory(doneSource).flatMap((group) => group.items),
+  };
+}

@@ -51,6 +51,9 @@ export function normalizeSectionOrder(value: unknown): DayspannSectionKind[] {
 /** 分類が一つもないときの「習慣」見出しのキー。その他（空文字）とは別に覚える。 */
 export const ALL_HABITS_GROUP_KEY = "*";
 
+/** 「今日」表示の「完了」見出しのキー。分類の名前とぶつからないよう、予約の id にする。 */
+export const DONE_HABITS_GROUP_KEY = "*done";
+
 /** 折りたたんだ習慣の見出しのキーを整える。文字列だけを、重複なく残す。 */
 export function normalizeCollapsedHabitGroups(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

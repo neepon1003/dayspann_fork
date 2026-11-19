@@ -17,7 +17,7 @@ import {
   shiftDateKey,
   stalledDays,
 } from "./date-utils";
-import { groupHabitsByCategory } from "./habit-category";
+import { groupHabitsByCategory, partitionHabitsDoneToday } from "./habit-category";
 import {
   buildHeatmapWeeks,
   countActiveDays,
@@ -45,7 +45,7 @@ import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, habitNextAction, splitTitle } from "./note-template";
 import { RECORD_TYPES, RecordType } from "./record-type";
-import { ALL_HABITS_GROUP_KEY, DayspannSectionKind } from "./settings";
+import { ALL_HABITS_GROUP_KEY, DONE_HABITS_GROUP_KEY, DayspannSectionKind } from "./settings";
 
 export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 
@@ -288,13 +288,16 @@ export class DayspannView extends ItemView {
       summarizeHabitTargets(byName.map((record) => scheduledTodayByRecord.get(record) ?? null))
     );
     this.renderHabitFilter(root);
-    // 「今日」のときは、今日が予定日の習慣だけを出す（今日やったものも残す）。並び順の決め方はこれまでどおり。
-    const visible =
-      this.plugin.settings.habitFilter === "today"
-        ? filterHabitsScheduledToday(byName, (record) => scheduledTodayByRecord.get(record) ?? null)
-        : byName;
+    // 「今日」のときは、今日が予定日の習慣だけを出す。今日やったものは分類から外し、いちばん下の「完了」にまとめる。
+    const todayMode = this.plugin.settings.habitFilter === "today";
+    const visible = todayMode
+      ? filterHabitsScheduledToday(byName, (record) => scheduledTodayByRecord.get(record) ?? null)
+      : byName;
+    const { pending, done } = todayMode
+      ? partitionHabitsDoneToday(visible, (record) => scheduledTodayByRecord.get(record) === true)
+      : { pending: visible, done: [] };
     // まだ目標に届いていない習慣を上に、届いた習慣（✓）を下にする。見出しの中でも、この順番のまま並ぶ。
-    const active = sortHabitsByPending(visible, (record) => metByRecord.get(record) ?? null);
+    const active = sortHabitsByPending(pending, (record) => metByRecord.get(record) ?? null);
     if (active.length) {
       const groups = groupHabitsByCategory(active);
       const useCategories = groups.some((group) => group.category);
@@ -306,11 +309,22 @@ export class DayspannView extends ItemView {
           this.renderHabitSection(root, title, group.category, group.items, logs);
         }
       }
-    } else if (this.plugin.settings.habitFilter === "today") {
+    } else if (todayMode && !done.length) {
       root.createDiv({
         cls: "dayspann-habit-filter-empty",
         text: this.plugin.t("view.habitFilterEmpty"),
       });
+    }
+    // 「今日」のときだけ、今日やった習慣をいちばん下の「完了」に出す。「すべて」では出さない。
+    if (todayMode && done.length) {
+      this.renderHabitSection(
+        root,
+        this.plugin.t("section.habitDone"),
+        DONE_HABITS_GROUP_KEY,
+        done,
+        logs,
+        "check"
+      );
     }
 
     // 「すべて」のときだけ、アーカイブした習慣をいちばん下に出す。
@@ -371,7 +385,8 @@ export class DayspannView extends ItemView {
     title: string,
     groupKey: string,
     records: DayspannRecord[],
-    logs: HabitLogDays
+    logs: HabitLogDays,
+    icon = "repeat"
   ): void {
     const section = root.createEl("section", { cls: "dayspann-section dayspann-section--habit" });
     const collapsed = this.plugin.settings.collapsedHabitGroups.includes(groupKey);
@@ -390,7 +405,7 @@ export class DayspannView extends ItemView {
         ),
       },
     });
-    setIcon(heading.createSpan("dayspann-section-icon"), "repeat");
+    setIcon(heading.createSpan("dayspann-section-icon"), icon);
     heading.createSpan({
       text: this.plugin.t("section.heading", { title, count: records.length }),
     });

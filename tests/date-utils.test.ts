@@ -26,6 +26,7 @@ import {
 import { createTranslator, durationUnit, formatCountUnit, resolveLocale } from "../src/i18n";
 import {
   ALL_HABITS_GROUP_KEY,
+  DONE_HABITS_GROUP_KEY,
   normalizeCollapsedHabitGroups,
   normalizeCollapsedSections,
   normalizeHabitFilter,
@@ -43,7 +44,7 @@ import { planCardActions } from "../src/card-actions";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
-import { groupHabitsByCategory, readCategory } from "../src/habit-category";
+import { groupHabitsByCategory, partitionHabitsDoneToday, readCategory } from "../src/habit-category";
 import {
   buildHeatmapWeeks,
   collectLogMonthKeys,
@@ -1801,4 +1802,70 @@ test("normalizeTaskChuteDeviceId and resolveTaskChuteTitle follow TaskChute, and
   const en = createTranslator("en");
   assert.equal(en("habit.logToday"), "Done today");
   assert.equal(en("action.undoHabitToday"), "Undo today's record");
+});
+
+test("partitionHabitsDoneToday moves habits done today into one group, keeping category then name order", () => {
+  const habits = [
+    { title: "スクワット", category: "運動", done: true },
+    { title: "ストレッチ", category: "", done: false },
+    { title: "走る", category: "運動", done: false },
+    { title: "技術書", category: "読書", done: true },
+    { title: "水を飲む", done: true },
+    { title: "小説", category: " 読書 ", done: false },
+    { title: "英語の単語", category: "英語", done: false },
+  ];
+  const { pending, done } = partitionHabitsDoneToday(habits, (habit) => habit.done);
+
+  assert.deepEqual(
+    groupHabitsByCategory(pending).map((group) => [group.category, group.items.map((item) => item.title)]),
+    [
+      ["運動", ["走る"]],
+      ["英語", ["英語の単語"]],
+      ["読書", ["小説"]],
+      ["", ["ストレッチ"]],
+    ]
+  );
+  assert.deepEqual(
+    done.map((item) => item.title),
+    ["スクワット", "技術書", "水を飲む"]
+  );
+
+  const noneDone = partitionHabitsDoneToday(habits, () => false);
+  assert.deepEqual(
+    noneDone.pending.map((item) => item.title),
+    habits.map((item) => item.title)
+  );
+  assert.deepEqual(noneDone.done, []);
+
+  const allDone = partitionHabitsDoneToday(habits, () => true);
+  assert.deepEqual(allDone.pending, []);
+  assert.deepEqual(
+    allDone.done.map((item) => item.title),
+    ["スクワット", "走る", "英語の単語", "技術書", "小説", "ストレッチ", "水を飲む"]
+  );
+  assert.deepEqual(partitionHabitsDoneToday([], () => true), { pending: [], done: [] });
+
+  const original = habits.map((item) => item.title);
+  partitionHabitsDoneToday(habits, (habit) => habit.done);
+  assert.deepEqual(
+    habits.map((item) => item.title),
+    original
+  );
+
+  assert.equal(DONE_HABITS_GROUP_KEY, "*done");
+  assert.notEqual(DONE_HABITS_GROUP_KEY, ALL_HABITS_GROUP_KEY);
+  assert.notEqual(DONE_HABITS_GROUP_KEY, "完了");
+  assert.deepEqual(normalizeCollapsedHabitGroups([DONE_HABITS_GROUP_KEY, DONE_HABITS_GROUP_KEY, "運動"]), [
+    DONE_HABITS_GROUP_KEY,
+    "運動",
+  ]);
+  assert.deepEqual(toggleCollapsedKey([], DONE_HABITS_GROUP_KEY, true), [DONE_HABITS_GROUP_KEY]);
+  assert.deepEqual(toggleCollapsedKey([DONE_HABITS_GROUP_KEY], DONE_HABITS_GROUP_KEY, false), []);
+
+  const t = createTranslator("ja");
+  assert.equal(t("section.habitDone"), "完了");
+  assert.equal(t("section.heading", { title: t("section.habitDone"), count: 3 }), "完了（3）");
+  const en = createTranslator("en");
+  assert.equal(en("section.habitDone"), "Done");
+  assert.equal(en("section.heading", { title: en("section.habitDone"), count: 3 }), "Done (3)");
 });
