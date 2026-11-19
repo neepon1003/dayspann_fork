@@ -1157,7 +1157,9 @@
   color: var(--color-orange);
 }
 
-/* 習慣のカードの右下の「✓」だけの丸いボタン（約 28px）。押す前は「今日」と同じアクセント色、記録したら緑で塗りつぶす。 */
+/* 習慣のカードの右下の「✓」だけの丸いボタン（約 36px）。押す前は「今日」と同じアクセント色、記録したら緑で塗りつぶす。
+   Obsidian の `button:not(.clickable-icon)` と、スマホの `.is-mobile button:not(.clickable-icon)` が
+   背景を `--interactive-normal`（暗い色）で上書きしないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
 .dayspann-habit-footer {
   display: flex;
   justify-content: flex-end;
@@ -1165,31 +1167,36 @@
   min-width: 0;
 }
 
-.dayspann-habit-log-button {
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  box-sizing: border-box;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: 1px solid var(--interactive-accent);
   border-radius: 50%;
   background: var(--interactive-accent);
+  background-color: var(--interactive-accent);
   box-shadow: none;
   color: var(--text-on-accent);
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-.dayspann-habit-log-button:hover {
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon):hover {
   background: var(--interactive-accent-hover, var(--interactive-accent));
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
   border-color: var(--interactive-accent-hover, var(--interactive-accent));
   color: var(--text-on-accent);
 }
 
-.dayspann-habit-log-button:focus-visible {
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon):focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
@@ -1200,20 +1207,21 @@
 }
 
 .dayspann-habit-log-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
 }
 
 /* 書いている途中は押せないように見せる。 */
-.dayspann-habit-log-button.is-busy {
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-busy {
   opacity: 0.6;
   cursor: progress;
 }
 
-.dayspann-habit-log-button.is-done,
-.dayspann-habit-log-button.is-done:hover {
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-done,
+.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-done:hover {
   border-color: var(--color-green, #22c55e);
   background: var(--color-green, #22c55e);
+  background-color: var(--color-green, #22c55e);
   color: #fff;
   cursor: default;
 }
