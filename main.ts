@@ -130,6 +130,7 @@ import {
   isInDailyLogFolder,
   normalizeDailyLogFolder,
   normalizeHabitMemoEnabled,
+  parsePreviousHabitMemo,
   prepareHabitMemoInput,
 } from "./src/habit-memo";
 import { displayTitle } from "./src/note-template";
@@ -700,19 +701,27 @@ export default class DayspannPlugin extends Plugin {
       new Notice(this.t("notice.habitMemoInDailyLog"));
       return;
     }
-    let currentNext = "";
+    let content = "";
     try {
-      currentNext = currentNextAction(await this.app.vault.read(file));
+      // 画面を出す直前にノートを読み直す（キャッシュがあれば cachedRead、なければ read）。
+      try {
+        content = await this.app.vault.cachedRead(file);
+      } catch {
+        content = await this.app.vault.read(file);
+      }
     } catch (error) {
       console.error("[PJ-span] 習慣のノートを読めませんでした", error);
       new Notice(this.t("notice.habitMemoFailed"));
       return;
     }
+    const currentNext = currentNextAction(content);
+    const previousMemo = parsePreviousHabitMemo(content);
     const answer = await promptHabitMemo(
       this.app,
       displayTitle(record.title),
       currentNext,
-      (key, variables) => this.t(key, variables)
+      (key, variables) => this.t(key, variables),
+      previousMemo
     );
     if (!answer) return;
     const input = prepareHabitMemoInput(answer.memo, answer.next);

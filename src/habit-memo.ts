@@ -1,4 +1,4 @@
-import { shiftDateKey } from "./date-utils";
+import { parseDateKey, shiftDateKey } from "./date-utils";
 
 /**
  * 「今日やった」のあとに出す「メモと次回」の画面で、習慣のノートに書く中身を作る関数。
@@ -368,4 +368,76 @@ export function habitMemoNotice(
   if (hasMemo) return { key: "notice.habitMemoSaved" };
   if (isMobile) return { key: "notice.habitNextMobile", duration: 8000 };
   return { key: "notice.habitNextSaved" };
+}
+
+/** 「## ログ」の 1 件の区切り（「--- 」または「---」）。 */
+const LOG_SEPARATOR_RE = /^---[ \t]*$/;
+/** 「- YYYY-MM-DD メモ」の先頭行。 */
+const LOG_MEMO_ENTRY_RE = /^- (\d{4}-\d{2}-\d{2})(?:[ \t]+(.*))?$/;
+
+/** 習慣ノートの「## ログ」から読み取った、いちばん新しいメモ。 */
+export interface PreviousHabitMemo {
+  date: string;
+  text: string;
+}
+
+/**
+ * 「## ログ」のいちばん上（いちばん新しい）の「- YYYY-MM-DD メモ」を取り出す。
+ * 2 行目から字下げした続きも、同じ 1 件として入れる。区切りの「--- 」の手前まで。
+ * 見出しが無い・中が空・日付のある行が無いときは null。
+ */
+export function parsePreviousHabitMemo(source: string): PreviousHabitMemo | null {
+  const section = sectionBody(source, LOG_HEADING_RE);
+  if (section === null) return null;
+  const lines = section.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (LOG_SEPARATOR_RE.test(line)) {
+      i += 1;
+      continue;
+    }
+    const match = LOG_MEMO_ENTRY_RE.exec(line);
+    if (!match) {
+      i += 1;
+      continue;
+    }
+    const date = match[1] ?? "";
+    const parts: string[] = [];
+    const first = (match[2] ?? "").trim();
+    if (first) parts.push(first);
+    i += 1;
+    while (i < lines.length) {
+      const raw = lines[i] ?? "";
+      if (LOG_SEPARATOR_RE.test(raw)) break;
+      if (/^[ \t]+/.test(raw) && raw.trim() !== "") {
+        parts.push(raw.trim());
+        i += 1;
+        continue;
+      }
+      break;
+    }
+    const text = parts.join("\n");
+    if (text) return { date, text };
+  }
+  return null;
+}
+
+/** 前回のメモの日付を「M月D日」にする（例：11月18日）。形式が違えばそのまま返す。 */
+export function formatPreviousMemoDate(date: string): string {
+  const parsed = parseDateKey(date);
+  if (!parsed) return date;
+  return `${parsed.month}月${parsed.day}日`;
+}
+
+/** 前回のメモを、画面用に最大 3 行までに整える。超えたら末尾に「…」を付け、全文は呼び出し側のツールチップに出す。 */
+export const PREVIOUS_MEMO_PREVIEW_LINES = 3;
+
+export function previewHabitMemoText(
+  text: string,
+  maxLines = PREVIOUS_MEMO_PREVIEW_LINES
+): { preview: string; truncated: boolean } {
+  const lines = String(text).split(/\r?\n/);
+  if (lines.length <= maxLines) return { preview: text, truncated: false };
+  return { preview: `${lines.slice(0, maxLines).join("\n")}…`, truncated: true };
 }

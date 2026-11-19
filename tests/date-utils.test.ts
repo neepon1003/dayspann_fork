@@ -50,6 +50,9 @@ import {
   replaceFirstOpenNext,
   submittedNextText,
   upsertTitle,
+  formatPreviousMemoDate,
+  parsePreviousHabitMemo,
+  previewHabitMemoText,
 } from "../src/habit-memo";
 import {
   buildHabitQuickAddVariables,
@@ -2331,4 +2334,36 @@ test("habit memo input, settings, daily log, and notice helpers follow the 感�
   const en = createTranslator("en");
   assert.equal(en("habitMemo.save"), "Save");
   assert.equal(en("setting.habitDailyLogFolder"), "Daily log folder");
+});
+
+test("parsePreviousHabitMemo reads the newest ログ memo, including multi-line and CRLF entries", () => {
+  assert.deepEqual(
+    parsePreviousHabitMemo("## ログ\n\n- 2026-11-18 45から解いた\n--- \n- 2026-11-17 前のメモ\n--- \n"),
+    { date: "2026-11-18", text: "45から解いた" }
+  );
+  assert.deepEqual(
+    parsePreviousHabitMemo("## ログ\r\n\r\n- 2026-11-18 1行目\r\n  2行目\r\n  3行目\r\n--- \r\n- 2026-11-17 古い\r\n--- \r\n"),
+    { date: "2026-11-18", text: "1行目\n2行目\n3行目" }
+  );
+  assert.equal(parsePreviousHabitMemo("本文だけ\n- 2026-11-18 メモ\n--- \n"), null);
+  assert.equal(parsePreviousHabitMemo("## ログ\n\n"), null);
+  assert.equal(parsePreviousHabitMemo("## ログ\n\n--- \n"), null);
+  assert.deepEqual(
+    parsePreviousHabitMemo("## ログ\n\n- 日付のないメモ\n--- \n- ただの行\n- 2026-11-01 本体\n--- \n"),
+    { date: "2026-11-01", text: "本体" }
+  );
+  assert.deepEqual(
+    parsePreviousHabitMemo("## ログ\n\n- 2026-11-18\n--- \n- 2026-11-10 次の有効なメモ\n--- \n"),
+    { date: "2026-11-10", text: "次の有効なメモ" }
+  );
+  assert.equal(formatPreviousMemoDate("2026-11-18"), "11月18日");
+  assert.equal(formatPreviousMemoDate("2026-01-05"), "1月5日");
+  assert.equal(formatPreviousMemoDate("メモ"), "メモ");
+  assert.deepEqual(previewHabitMemoText("1\n2\n3"), { preview: "1\n2\n3", truncated: false });
+  assert.deepEqual(previewHabitMemoText("1\n2\n3\n4"), { preview: "1\n2\n3…", truncated: true });
+
+  const t = createTranslator("ja");
+  assert.equal(t("habitMemo.previous", { date: "11月18日", text: "45から解いた" }), "前回（11月18日）：45から解いた");
+  const en = createTranslator("en");
+  assert.equal(en("habitMemo.previous", { date: "11月18日", text: "45から解いた" }), "Previous (11月18日): 45から解いた");
 });

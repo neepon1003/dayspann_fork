@@ -15,6 +15,7 @@ import {
   parseDateKey,
 } from "./date-utils";
 import { readCategory } from "./habit-category";
+import { formatPreviousMemoDate, previewHabitMemoText, type PreviousHabitMemo } from "./habit-memo";
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
 import { habitNextAction, joinTitle, splitTitle } from "./note-template";
@@ -570,10 +571,11 @@ export function promptHabitMemo(
   app: App,
   title: string,
   currentNext: string,
-  t: Translator
+  t: Translator,
+  previousMemo: PreviousHabitMemo | null = null
 ): Promise<HabitMemoAnswer | null> {
   return new Promise((resolve) => {
-    new HabitMemoModal(app, title, currentNext, t, resolve).open();
+    new HabitMemoModal(app, title, currentNext, t, previousMemo, resolve).open();
   });
 }
 
@@ -585,6 +587,7 @@ class HabitMemoModal extends Modal {
     private title: string,
     private currentNext: string,
     private t: Translator,
+    private previousMemo: PreviousHabitMemo | null,
     private resolve: (answer: HabitMemoAnswer | null) => void
   ) {
     super(app);
@@ -597,6 +600,27 @@ class HabitMemoModal extends Modal {
     this.titleEl.setText(this.t("habitMemo.title", { title: this.title }));
 
     const memoWrap = contentEl.createDiv("dayspann-modal-field");
+    if (this.previousMemo) {
+      const preview = previewHabitMemoText(this.previousMemo.text);
+      const date = formatPreviousMemoDate(this.previousMemo.date);
+      const full = this.t("habitMemo.previous", { date, text: this.previousMemo.text });
+      const shown = this.t("habitMemo.previous", { date, text: preview.preview });
+      const previous = memoWrap.createDiv({ cls: "dayspann-habit-memo-previous", text: shown });
+      previous.setAttr("title", full);
+      const enableExpand = () => {
+        if (previous.hasClass("is-expandable")) return;
+        previous.addClass("is-expandable");
+        previous.addEventListener("click", () => {
+          const expanded = previous.hasClass("is-expanded");
+          previous.toggleClass("is-expanded", !expanded);
+          previous.setText(expanded ? shown : full);
+        });
+      };
+      if (preview.truncated) enableExpand();
+      window.setTimeout(() => {
+        if (previous.scrollHeight > previous.clientHeight + 1) enableExpand();
+      }, 0);
+    }
     const memoLabel = memoWrap.createEl("label", { text: this.t("habitMemo.memo") });
     const memo = memoWrap.createEl("textarea", { cls: "dayspann-habit-memo-textarea" });
     memo.id = "dayspann-habit-memo-memo";

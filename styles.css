@@ -1227,6 +1227,29 @@
   font-size: var(--font-ui-medium);
 }
 
+.dayspann-habit-memo-previous {
+  margin: 0 0 8px;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.dayspann-habit-memo-previous.is-expandable {
+  cursor: pointer;
+}
+
+.dayspann-habit-memo-previous.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
 .dayspann-habit-memo-textarea {
   min-height: 96px;
   resize: vertical;
