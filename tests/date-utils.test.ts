@@ -1835,11 +1835,15 @@ test("normalizeTaskChuteDeviceId and resolveTaskChuteTitle follow TaskChute, and
 
   const t = createTranslator("ja");
   assert.equal(t("habit.logToday"), "今日やった");
+  assert.equal(t("habit.logTodayTooltip"), "今日やった");
   assert.equal(t("habit.doneToday"), "今日 ✓");
+  assert.equal(t("habit.loggedTodayTooltip"), "今日 ✓（記録済み）");
   assert.equal(t("action.undoHabitToday"), "今日の記録を取り消す");
   assert.equal(t("notice.habitLogged", { title: "腕立て" }), "『腕立て』の今日の分を記録しました");
   const en = createTranslator("en");
   assert.equal(en("habit.logToday"), "Done today");
+  assert.equal(en("habit.logTodayTooltip"), "Done today");
+  assert.equal(en("habit.loggedTodayTooltip"), "Today ✓ (recorded)");
   assert.equal(en("action.undoHabitToday"), "Undo today's record");
 });
 

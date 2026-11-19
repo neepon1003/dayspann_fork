@@ -511,7 +511,7 @@ export class DayspannView extends ItemView {
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
 
-    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出し、右下に「今日やった」ボタンを置く。
+    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出し、右下に「✓」ボタンを置く。
     if (counts) {
       this.renderHeatmap(content, record, counts, todayKey);
       this.renderHabitLogButton(content, record, doneToday);
@@ -519,8 +519,9 @@ export class DayspannView extends ItemView {
   }
 
   /**
-   * カードの右下の「✓ 今日やった」ボタン。押すと TaskChute の実行ログに今日の分を 1 件書く。
-   * 今日の記録がもうあれば、緑の「今日 ✓」にして、押しても何もしない（取り消しは「…」メニューから）。
+   * カードの右下の「✓」だけの丸いボタン。押すと TaskChute の実行ログに今日の分を 1 件書く。
+   * 今日の記録がもうあれば、緑の「✓」にして、押しても何もしない（取り消しは「…」メニューから）。
+   * 見た目の文字は出さず、名前はツールチップと aria-label に「今日やった」／「今日 ✓（記録済み）」と出す。
    */
   private renderHabitLogButton(parent: HTMLElement, record: DayspannRecord, doneToday: boolean): void {
     const footer = parent.createDiv("dayspann-habit-footer");
@@ -529,8 +530,7 @@ export class DayspannView extends ItemView {
       cls: doneToday ? "dayspann-habit-log-button is-done" : "dayspann-habit-log-button",
       attr: { type: "button", "aria-label": tooltip, "aria-disabled": String(doneToday) },
     });
-    if (!doneToday) setIcon(button.createSpan("dayspann-habit-log-icon"), "check");
-    button.createSpan({ text: this.plugin.t(doneToday ? "habit.doneToday" : "habit.logToday") });
+    setIcon(button.createSpan("dayspann-habit-log-icon"), "check");
     setTooltip(button, tooltip);
     // カードの Enter（ノートを開く）に伝わらないようにする。
     button.addEventListener("keydown", (event) => event.stopPropagation());
