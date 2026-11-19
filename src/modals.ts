@@ -16,6 +16,7 @@ import {
 import { readCategory } from "./habit-category";
 import { Translator } from "./i18n";
 import { DayspannDraft } from "./model";
+import { habitNextAction, joinTitle, splitTitle } from "./note-template";
 import type { EmptyRequiredField } from "./record-edit";
 import { DEFAULT_RECORD_TYPE, normalizeRecordType, readRecordType } from "./record-type";
 
@@ -267,6 +268,8 @@ export class KeepEntryOpenError extends Error {}
 export class DayspannEntryModal extends Modal {
   private draft: DayspannDraft;
   private errorEl?: HTMLElement;
+  private nameInput?: HTMLInputElement;
+  private nextActionInput?: HTMLInputElement;
 
   constructor(
     app: App,
@@ -282,6 +285,7 @@ export class DayspannEntryModal extends Modal {
       displayMode: initial.displayMode ?? DEFAULT_DISPLAY_MODE,
       type: initial.type ?? DEFAULT_RECORD_TYPE,
     };
+    if (this.draft.type === "habit") this.splitHabitTitle();
   }
 
   onOpen(): void {
@@ -294,6 +298,7 @@ export class DayspannEntryModal extends Modal {
       .setName(this.t("modal.name"))
       .setDesc(this.t("modal.nameDesc"))
       .addText((text) => {
+        this.nameInput = text.inputEl;
         text.setValue(this.draft.title).onChange((value) => {
           this.draft.title = value;
         });
@@ -332,6 +337,20 @@ export class DayspannEntryModal extends Modal {
           }
           text.inputEl.setAttribute("list", listId);
         }
+      });
+
+    new Setting(contentEl)
+      .setName(this.t("modal.nextAction"))
+      .setClass("dayspann-habit-field")
+      .setDesc(this.t("modal.nextActionDesc"))
+      .addText((text) => {
+        this.nextActionInput = text.inputEl;
+        text
+          .setPlaceholder(this.t("modal.nextActionPlaceholder"))
+          .setValue(this.draft.nextAction ?? "")
+          .onChange((value) => {
+            this.draft.nextAction = value;
+          });
       });
 
     new Setting(contentEl)
@@ -457,9 +476,31 @@ export class DayspannEntryModal extends Modal {
     }
   }
 
-  /** 種類が習慣のときは、期日・完了条件・表示形式の欄を隠し、分類の欄を出す（CSS の dayspann-entry-modal--habit）。 */
+  /** 種類が習慣のときは、期日・完了条件・表示形式の欄を隠し、分類と次の一手の欄を出す（CSS の dayspann-entry-modal--habit）。 */
   private updateTypeFields(): void {
-    this.modalEl.toggleClass("dayspann-entry-modal--habit", this.draft.type === "habit");
+    const isHabit = this.draft.type === "habit";
+    if (isHabit && this.draft.nextAction === undefined) {
+      this.splitHabitTitle();
+      if (this.nameInput) this.nameInput.value = this.draft.title;
+      if (this.nextActionInput) this.nextActionInput.value = this.draft.nextAction ?? "";
+    } else if (!isHabit && this.draft.nextAction !== undefined) {
+      this.joinHabitTitle();
+      if (this.nameInput) this.nameInput.value = this.draft.title;
+    }
+    this.modalEl.toggleClass("dayspann-entry-modal--habit", isHabit);
+  }
+
+  /** 習慣の編集では、名前と次の一手を分けて欄に出す。初期値「プロジェクトノート作成」は空にする。 */
+  private splitHabitTitle(): void {
+    const parts = splitTitle(this.draft.title);
+    this.draft.nextAction = habitNextAction(this.draft.title);
+    this.draft.title = parts.name || this.draft.title;
+  }
+
+  /** 種類をプロジェクトに戻すとき、次の一手をタイトルの「｜」の後ろに戻す。 */
+  private joinHabitTitle(): void {
+    this.draft.title = joinTitle(this.draft.title, this.draft.nextAction ?? "");
+    this.draft.nextAction = undefined;
   }
 
   /** すでにある習慣の分類を、入力の候補として集める。 */

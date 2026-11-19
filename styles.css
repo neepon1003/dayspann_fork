@@ -1005,11 +1005,11 @@
   line-height: 1;
 }
 
-/* 今週の行（いちばん下）。週番号も含めて、行の後ろをうっすら色づけする。外側の影で少しはみ出させ、マスの位置は変えない。 */
+/* 今週の行（いちばん下）。週番号も含めて、行の後ろをうっすらオレンジに色づけする。外側の影で少しはみ出させ、マスの位置は変えない。 */
 .dayspann-heatmap-week--current {
   border-radius: 4px;
-  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  background: color-mix(in srgb, var(--color-orange, #ea580c) 20%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-orange, #ea580c) 20%, transparent);
 }
 
 .dayspann-heatmap-week--current .dayspann-heatmap-weeknum {

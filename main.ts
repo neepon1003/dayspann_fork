@@ -116,7 +116,7 @@ export interface DayspannSettings {
   archiveCollapsed: boolean;
   /** 折りたたんだ習慣の見出しのキー。分類の名前、その他は空文字、分類が一つもないときの「習慣」見出しは "*"。 */
   collapsedHabitGroups: string[];
-  /** 習慣タブの表示。「今日だけ」か「すべて」。再起動しても残る。 */
+  /** 習慣タブの表示。「今日」か「すべて」。再起動しても残る。 */
   habitFilter: HabitFilter;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;

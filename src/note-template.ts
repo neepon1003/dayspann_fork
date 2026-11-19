@@ -60,3 +60,33 @@ export function splitTitle(title: string): SplitTitle {
     nextAction: title.slice(index + "｜".length).trim(),
   };
 }
+
+/** 新しく登録したときの次の一手の初期値（NEW_NOTE_TITLE_SUFFIX の「｜」より後ろ）。 */
+export const DEFAULT_NEXT_ACTION = NEW_NOTE_TITLE_SUFFIX.slice("｜".length);
+
+/** 名前と次の一手を、全角「｜」でつなげる。次の一手が空なら名前だけ。 */
+export function joinTitle(name: string, nextAction: string): string {
+  const trimmedName = name.trim();
+  const trimmedNext = nextAction.trim();
+  return trimmedNext ? `${trimmedName}｜${trimmedNext}` : trimmedName;
+}
+
+/**
+ * 習慣のカードに出す次の一手。
+ * 新しく登録したときの初期値「プロジェクトノート作成」は、習慣には出さない。
+ */
+export function habitNextAction(title: string): string {
+  const nextAction = splitTitle(title).nextAction;
+  return nextAction === DEFAULT_NEXT_ACTION ? "" : nextAction;
+}
+
+/**
+ * 習慣の title を、名前と次の一手から組む。
+ * nextAction を渡したときはそれを使い、渡さなければ名前の「｜」より後ろを使う。
+ * 初期値「プロジェクトノート作成」は付けない。
+ */
+export function buildHabitTitle(name: string, nextAction?: string): string {
+  const parts = splitTitle(name);
+  const next = nextAction !== undefined ? nextAction.trim() : parts.nextAction;
+  return joinTitle(parts.name, habitNextAction(joinTitle(parts.name, next)));
+}

@@ -100,6 +100,10 @@ import {
   displayTitle,
   excerptForCard,
   splitTitle,
+  joinTitle,
+  habitNextAction,
+  buildHabitTitle,
+  DEFAULT_NEXT_ACTION,
   NEW_NOTE_TOOLBAR,
 } from "../src/note-template";
 import {
@@ -805,6 +809,56 @@ test("タイトルの「｜」より後ろを次の一手として分ける", ()
   assert.deepEqual(splitTitle("｜プロジェクトノート作成"), { name: "", nextAction: "プロジェクトノート作成" });
   assert.equal(createTranslator("ja")("view.nextAction"), "次の一手");
   assert.equal(createTranslator("en")("view.nextAction"), "Next action");
+});
+
+test("習慣の次の一手はタイトルの「｜」より後ろで、初期値は出さない", () => {
+  assert.equal(DEFAULT_NEXT_ACTION, "プロジェクトノート作成");
+  assert.equal(joinTitle("スクワット", "10回やる"), "スクワット｜10回やる");
+  assert.equal(joinTitle("  スクワット  ", "  "), "スクワット");
+  assert.equal(joinTitle("スクワット", ""), "スクワット");
+  assert.equal(habitNextAction("スクワット｜10回やる"), "10回やる");
+  assert.equal(habitNextAction("スクワット"), "");
+  assert.equal(habitNextAction("スクワット｜"), "");
+  assert.equal(habitNextAction("スクワット｜プロジェクトノート作成"), "");
+  assert.equal(buildHabitTitle("スクワット"), "スクワット");
+  assert.equal(buildHabitTitle("スクワット｜プロジェクトノート作成"), "スクワット");
+  assert.equal(buildHabitTitle("スクワット", "10回やる"), "スクワット｜10回やる");
+  assert.equal(buildHabitTitle("スクワット｜古い一手", "10回やる"), "スクワット｜10回やる");
+  assert.equal(buildHabitTitle("スクワット｜10回やる"), "スクワット｜10回やる");
+  assert.equal(buildHabitTitle("スクワット", "プロジェクトノート作成"), "スクワット");
+  assert.equal(buildHabitTitle("スクワット", "  "), "スクワット");
+
+  const frontmatter: Record<string, unknown> = { type: "habit", title: "スクワット｜プロジェクトノート作成" };
+  applyDraftToFrontmatter(frontmatter, {
+    title: "スクワット",
+    type: "habit",
+    nextAction: "10回やる",
+    date: "",
+    excerpt: "",
+  });
+  assert.equal(frontmatter.title, "スクワット｜10回やる");
+  applyDraftToFrontmatter(frontmatter, {
+    title: "スクワット｜10回やる",
+    type: "habit",
+    date: "",
+    excerpt: "",
+  });
+  assert.equal(frontmatter.title, "スクワット｜10回やる");
+  applyDraftToFrontmatter(frontmatter, {
+    title: "スクワット",
+    type: "habit",
+    nextAction: "",
+    date: "",
+    excerpt: "",
+  });
+  assert.equal(frontmatter.title, "スクワット");
+
+  assert.equal(createTranslator("ja")("modal.nextAction"), "次の一手");
+  assert.equal(createTranslator("ja")("modal.nextActionDesc"), "次にやることを書きます（空でもかまいません）");
+  assert.equal(createTranslator("ja")("modal.nextActionPlaceholder"), "例：10回やる");
+  assert.equal(createTranslator("en")("modal.nextAction"), "Next action");
+  assert.equal(createTranslator("en")("modal.nextActionDesc"), "What to do next (optional)");
+  assert.equal(createTranslator("en")("modal.nextActionPlaceholder"), "e.g. Do 10 reps");
 });
 
 test("期日が今日から設定の日数後までなら、期日が近いとして残りの日数を返す", () => {
@@ -1606,7 +1660,7 @@ test("filterHabitsScheduledToday keeps only habits scheduled for today, includin
   assert.deepEqual(filterHabitsScheduledToday([], () => true), []);
 
   const t = createTranslator("ja");
-  assert.equal(t("view.habitFilterToday"), "今日だけ");
+  assert.equal(t("view.habitFilterToday"), "今日");
   assert.equal(t("view.habitFilterAll"), "すべて");
   assert.equal(t("view.habitFilterEmpty"), "今日が予定日の習慣はありません");
   const en = createTranslator("en");

@@ -16,7 +16,6 @@ import {
   postponeTargets,
   shiftDateKey,
   stalledDays,
-  toDateKey,
 } from "./date-utils";
 import { groupHabitsByCategory } from "./habit-category";
 import {
@@ -44,7 +43,7 @@ import {
 import { durationUnit, formatCountUnit } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
-import { displayTitle, excerptForCard, splitTitle } from "./note-template";
+import { displayTitle, excerptForCard, habitNextAction, splitTitle } from "./note-template";
 import { RECORD_TYPES, RecordType } from "./record-type";
 import { ALL_HABITS_GROUP_KEY, DayspannSectionKind } from "./settings";
 
@@ -289,7 +288,7 @@ export class DayspannView extends ItemView {
       summarizeHabitTargets(byName.map((record) => scheduledTodayByRecord.get(record) ?? null))
     );
     this.renderHabitFilter(root);
-    // 「今日だけ」のときは、今日が予定日の習慣だけを出す（今日やったものも残す）。並び順の決め方はこれまでどおり。
+    // 「今日」のときは、今日が予定日の習慣だけを出す（今日やったものも残す）。並び順の決め方はこれまでどおり。
     const visible =
       this.plugin.settings.habitFilter === "today"
         ? filterHabitsScheduledToday(byName, (record) => scheduledTodayByRecord.get(record) ?? null)
@@ -345,7 +344,7 @@ export class DayspannView extends ItemView {
     count.setAttribute("aria-label", tooltip);
   }
 
-  /** 「今日だけ」と「すべて」を切り替えるボタン。選んだほうは設定に覚えておき、次に開いたときもそのままにする。 */
+  /** 「今日」と「すべて」を切り替えるボタン。選んだほうは設定に覚えておき、次に開いたときもそのままにする。 */
   private renderHabitFilter(root: HTMLElement): void {
     const current = this.plugin.settings.habitFilter;
     const group = root.createDiv({
@@ -455,15 +454,17 @@ export class DayspannView extends ItemView {
     const undoable = logs && counts ? findPjSpanEntries(logs, habit, todayKey).length > 0 : false;
 
     headText.createEl("h3", { text: title });
-    const updated = formatCompletedCardDate(
-      toDateKey(new Date(record.file.stat.mtime)),
-      todayKey,
-      this.plugin.locale()
-    );
-    headText.createDiv({
-      text: this.plugin.t("view.lastUpdated", { date: updated }),
-      cls: "dayspann-card-date",
-    });
+    // 完了していない習慣は、タイトルの「｜」より後ろを「次の一手」として出す（プロジェクトのカードと同じ）。
+    const nextAction = record.archived ? "" : habitNextAction(record.title);
+    if (nextAction) {
+      const next = headText.createDiv({ cls: "dayspann-card-next" });
+      const icon = next.createSpan("dayspann-card-next-icon");
+      setIcon(icon, "arrow-right");
+      icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
+      next.createSpan({ text: nextAction, cls: "dayspann-card-next-text" });
+      next.setAttribute("title", nextAction);
+      setTooltip(next, nextAction);
+    }
 
     const headActions = head.createDiv("dayspann-habit-head-actions");
     if (progress) {

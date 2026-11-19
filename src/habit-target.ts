@@ -377,7 +377,7 @@ export function habitScheduledTodayStatus(
 }
 
 /**
- * 「今日だけ」表示用。今日が予定日の習慣だけを残す（今日やったものも含む）。
+ * 「今日」表示用。今日が予定日の習慣だけを残す（今日やったものも含む）。
  * scheduledToday は habitScheduledTodayStatus と同じく、予定日なら true/false、違えば null。
  */
 export function filterHabitsScheduledToday<T>(

@@ -1,5 +1,6 @@
 import { readCategory } from "./habit-category";
 import type { DayspannDraft } from "./model";
+import { buildHabitTitle } from "./note-template";
 import { formatSourceReference, parseSourceReference } from "./source-link";
 
 /** 完了条件（goal）を 1 行の文字にする。改行や続いた空白は 1 つの空白にまとめる。文字でなければ空文字。 */
@@ -17,7 +18,7 @@ export function applyDraftToFrontmatter(
   frontmatter: Record<string, unknown>,
   draft: DayspannDraft
 ): void {
-  frontmatter.title = draft.title.trim();
+  frontmatter.title = draft.type === "habit" ? buildHabitTitle(draft.title, draft.nextAction) : draft.title.trim();
   if (draft.type) frontmatter.type = draft.type;
   if (draft.type !== "habit") {
     if (draft.date) frontmatter.date = draft.date;

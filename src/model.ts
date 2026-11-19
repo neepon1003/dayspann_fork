@@ -6,7 +6,7 @@ import {
   parseDateKey,
   readDateKey,
 } from "./date-utils";
-import { buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
+import { buildHabitTitle, buildNewNoteBody, buildNewNoteTitle, NEW_NOTE_TOOLBAR } from "./note-template";
 import { readStreakUnit, StreakUnit } from "./habit-log";
 import { HabitSchedule, HabitTarget, readHabitSchedule, readHabitTarget } from "./habit-target";
 import { readCategory } from "./habit-category";
@@ -46,6 +46,8 @@ export interface DayspannDraft {
   /** 種類。なければ project。 */
   type?: RecordType;
   title: string;
+  /** 次の一手。習慣の編集・登録で使う。保存するときは title の「｜」より後ろに入れる。 */
+  nextAction?: string;
   date: string;
   goal?: string;
   /** 分類。習慣のときだけ使う。空なら「その他」。 */
@@ -61,13 +63,17 @@ export interface DayspannDraft {
 
 /**
  * 新しい記録のノートの中身を作る（新しく登録するときだけ使う）。
- * タイトルの後ろに「｜プロジェクトノート作成」を付け、notetoolbar: [btn] と「概要」「次の一手」「ログ」の見出しを入れる。
+ * プロジェクトはタイトルの後ろに「｜プロジェクトノート作成」を付ける。習慣は次の一手があれば「｜」で付け、初期値は付けない。
+ * notetoolbar: [btn] と「概要」「次の一手」「ログ」の見出しを入れる。
  * taskchute を渡すと、TaskChute のタスク（tags・taskId・target_date）としても作る。
  */
 export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTaskFields): string {
   const frontmatter: Record<string, string | number | boolean | string[]> = {
     type: draft.type ?? DEFAULT_RECORD_TYPE,
-    title: buildNewNoteTitle(draft.title),
+    title:
+      (draft.type ?? DEFAULT_RECORD_TYPE) === "habit"
+        ? buildHabitTitle(draft.title, draft.nextAction)
+        : buildNewNoteTitle(draft.title),
     notetoolbar: [...NEW_NOTE_TOOLBAR],
     date: draft.date,
     display: draft.displayMode ?? DEFAULT_DISPLAY_MODE,
