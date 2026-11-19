@@ -75,9 +75,11 @@ import {
   DEFAULT_SOON_DAYS,
   DEFAULT_STALLED_DAYS,
   DayspannSectionKind,
+  HabitFilter,
   MAX_SOON_DAYS,
   normalizeCollapsedHabitGroups,
   normalizeCollapsedSections,
+  normalizeHabitFilter,
   normalizeSectionOrder,
   parseSoonDays,
   toggleCollapsedKey,
@@ -101,6 +103,8 @@ export interface DayspannSettings {
   archiveCollapsed: boolean;
   /** 折りたたんだ習慣の見出しのキー。分類の名前、その他は空文字、分類が一つもないときの「習慣」見出しは "*"。 */
   collapsedHabitGroups: string[];
+  /** 習慣タブの表示。「今日だけ」か「すべて」。再起動しても残る。 */
+  habitFilter: HabitFilter;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;
 }
@@ -116,6 +120,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   undatedCollapsed: false,
   archiveCollapsed: true,
   collapsedHabitGroups: [],
+  habitFilter: "all",
   activeTab: DEFAULT_RECORD_TYPE,
 };
 
@@ -612,6 +617,11 @@ export default class DayspannPlugin extends Plugin {
     await this.saveSettings();
   }
 
+  async setHabitFilter(filter: HabitFilter): Promise<void> {
+    this.settings.habitFilter = filter;
+    await this.saveSettings();
+  }
+
   private async loadSettings(): Promise<void> {
     const saved = (await this.loadData()) as Partial<DayspannSettings> | null;
     const savedStorageFolder = saved?.storageFolder?.trim();
@@ -635,6 +645,7 @@ export default class DayspannPlugin extends Plugin {
       undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
       archiveCollapsed: saved?.archiveCollapsed ?? DEFAULT_SETTINGS.archiveCollapsed,
       collapsedHabitGroups: normalizeCollapsedHabitGroups(saved?.collapsedHabitGroups),
+      habitFilter: normalizeHabitFilter(saved?.habitFilter),
       activeTab: normalizeRecordType(saved?.activeTab),
     };
   }

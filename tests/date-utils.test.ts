@@ -28,6 +28,7 @@ import {
   ALL_HABITS_GROUP_KEY,
   normalizeCollapsedHabitGroups,
   normalizeCollapsedSections,
+  normalizeHabitFilter,
   normalizeSectionOrder,
   parseSoonDays,
   toggleCollapsedKey,
@@ -76,6 +77,7 @@ import {
   readWeekday,
   sortHabitsByPending,
   habitScheduledTodayStatus,
+  filterHabitsScheduledToday,
   summarizeHabitTargets,
   weekStreakTarget,
 } from "../src/habit-target";
@@ -1549,4 +1551,53 @@ test("habitScheduledTodayStatus counts only habits scheduled for today, and met 
   const en = createTranslator("en");
   assert.equal(en("view.habitTargetsNone"), "Targets met: none scheduled today");
   assert.equal(en("view.habitTargetsTooltip"), "Number of habits scheduled for today that were done today");
+});
+
+test("normalizeHabitFilter keeps today and treats anything else as all", () => {
+  assert.equal(normalizeHabitFilter("today"), "today");
+  assert.equal(normalizeHabitFilter("all"), "all");
+  assert.equal(normalizeHabitFilter(undefined), "all");
+  assert.equal(normalizeHabitFilter(""), "all");
+  assert.equal(normalizeHabitFilter("other"), "all");
+});
+
+test("filterHabitsScheduledToday keeps only habits scheduled for today, including those already done", () => {
+  const today = "2026-11-19"; // 木曜日
+  const habits = [
+    {
+      title: "daily-done",
+      status: habitScheduledTodayStatus(readHabitSchedule({ routine_type: "daily" }), today, true),
+    },
+    {
+      title: "weekly-tue",
+      status: habitScheduledTodayStatus(
+        readHabitSchedule({ routine_type: "weekly", routine_weekdays: ["火", "金"] }),
+        today,
+        true
+      ),
+    },
+    {
+      title: "weekdays-pending",
+      status: habitScheduledTodayStatus(readHabitSchedule({ routine_type: "weekdays" }), today, false),
+    },
+    {
+      title: "weekend",
+      status: habitScheduledTodayStatus(readHabitSchedule({ routine_type: "weekends" }), today, true),
+    },
+    { title: "unlinked", status: null },
+  ];
+  assert.deepEqual(
+    filterHabitsScheduledToday(habits, (habit) => habit.status).map((habit) => habit.title),
+    ["daily-done", "weekdays-pending"]
+  );
+  assert.deepEqual(filterHabitsScheduledToday([], () => true), []);
+
+  const t = createTranslator("ja");
+  assert.equal(t("view.habitFilterToday"), "今日だけ");
+  assert.equal(t("view.habitFilterAll"), "すべて");
+  assert.equal(t("view.habitFilterEmpty"), "今日が予定日の習慣はありません");
+  const en = createTranslator("en");
+  assert.equal(en("view.habitFilterToday"), "Today");
+  assert.equal(en("view.habitFilterAll"), "All");
+  assert.equal(en("view.habitFilterEmpty"), "No habits are scheduled for today");
 });

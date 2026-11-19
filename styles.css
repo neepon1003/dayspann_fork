@@ -858,6 +858,57 @@
   color: var(--text-normal);
 }
 
+/* 習慣タブの「今日だけ / すべて」切り替え。上のタブのすぐ下に置く。 */
+.dayspann-habit-filter {
+  display: flex;
+  max-width: 900px;
+  margin: -12px auto 20px;
+}
+
+.dayspann-habit-filter-button {
+  height: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 0;
+  background: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dayspann-habit-filter-button:first-child {
+  border-top-left-radius: var(--radius-s, 6px);
+  border-bottom-left-radius: var(--radius-s, 6px);
+}
+
+.dayspann-habit-filter-button:last-child {
+  margin-left: -1px;
+  border-top-right-radius: var(--radius-s, 6px);
+  border-bottom-right-radius: var(--radius-s, 6px);
+}
+
+.dayspann-habit-filter-button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.dayspann-habit-filter-button.is-active {
+  z-index: 1;
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.dayspann-habit-filter-empty {
+  max-width: 900px;
+  margin: 0 auto 24px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
 /* 習慣のセクション。見出しをクリックすると折りたためる。 */
 .dayspann-section--habit {
   --dayspann-accent: var(--color-purple, var(--interactive-accent));

@@ -70,3 +70,11 @@ export function toggleCollapsedKey(keys: string[], key: string, collapsed: boole
   if (collapsed) next.push(key);
   return next;
 }
+
+/** 習慣タブの表示。today は今日が予定日の習慣だけ、all はすべての習慣。 */
+export type HabitFilter = "today" | "all";
+
+/** 覚えておいた表示の指定を整える。today 以外はすべて all にする。 */
+export function normalizeHabitFilter(value: unknown): HabitFilter {
+  return value === "today" ? "today" : "all";
+}

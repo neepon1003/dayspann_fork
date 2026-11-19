@@ -36,6 +36,7 @@ import {
   isHabitScheduled,
   sortHabitsByPending,
   habitScheduledTodayStatus,
+  filterHabitsScheduledToday,
   summarizeHabitTargets,
   weekStreakTarget,
 } from "./habit-target";
@@ -278,13 +279,22 @@ export class DayspannView extends ItemView {
       .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
     // 目標に届いたかは 1 回だけ調べて、並べ替えに使う（カードの日数と同じ決め方）。
     const metByRecord = new Map(byName.map((record) => [record, this.habitMet(record, logs, todayKey)]));
-    // 上の「目標達成」は、今日が予定日の習慣のうち、今日やった数だけを数える。
+    // 上の「目標達成」は、今日が予定日の習慣のうち、今日やった数だけを数える（表示の切り替えでは変えない）。
+    const scheduledTodayByRecord = new Map(
+      byName.map((record) => [record, this.habitScheduledToday(record, logs, todayKey)])
+    );
     this.renderHabitSummary(
       heading,
-      summarizeHabitTargets(byName.map((record) => this.habitScheduledToday(record, logs, todayKey)))
+      summarizeHabitTargets(byName.map((record) => scheduledTodayByRecord.get(record) ?? null))
     );
+    this.renderHabitFilter(root);
+    // 「今日だけ」のときは、今日が予定日の習慣だけを出す（今日やったものも残す）。並び順の決め方はこれまでどおり。
+    const visible =
+      this.plugin.settings.habitFilter === "today"
+        ? filterHabitsScheduledToday(byName, (record) => scheduledTodayByRecord.get(record) ?? null)
+        : byName;
     // まだ目標に届いていない習慣を上に、届いた習慣（✓）を下にする。見出しの中でも、この順番のまま並ぶ。
-    const active = sortHabitsByPending(byName, (record) => metByRecord.get(record) ?? null);
+    const active = sortHabitsByPending(visible, (record) => metByRecord.get(record) ?? null);
     if (active.length) {
       const groups = groupHabitsByCategory(active);
       const useCategories = groups.some((group) => group.category);
@@ -296,15 +306,23 @@ export class DayspannView extends ItemView {
           this.renderHabitSection(root, title, group.category, group.items, logs);
         }
       }
+    } else if (this.plugin.settings.habitFilter === "today") {
+      root.createDiv({
+        cls: "dayspann-habit-filter-empty",
+        text: this.plugin.t("view.habitFilterEmpty"),
+      });
     }
 
-    const archived = records
-      .filter((record) => record.archived)
-      .map((record) => ({ record, difference: null }))
-      .sort((a, b) =>
-        compareArchiveOrder(a.record.completed, b.record.completed, a.record.date, b.record.date)
-      );
-    this.renderArchiveSection(root, archived, todayKey);
+    // 「すべて」のときだけ、アーカイブした習慣をいちばん下に出す。
+    if (this.plugin.settings.habitFilter === "all") {
+      const archived = records
+        .filter((record) => record.archived)
+        .map((record) => ({ record, difference: null }))
+        .sort((a, b) =>
+          compareArchiveOrder(a.record.completed, b.record.completed, a.record.date, b.record.date)
+        );
+      this.renderArchiveSection(root, archived, todayKey);
+    }
   }
 
   /** 「目標達成：3/5」の 1 行。今日が予定日の習慣が無ければ「今日の予定なし」。全部やったら ✓ を付けて緑にする。 */
@@ -324,6 +342,27 @@ export class DayspannView extends ItemView {
     const tooltip = this.plugin.t("view.habitTargetsTooltip");
     setTooltip(count, tooltip);
     count.setAttribute("aria-label", tooltip);
+  }
+
+  /** 「今日だけ」と「すべて」を切り替えるボタン。選んだほうは設定に覚えておき、次に開いたときもそのままにする。 */
+  private renderHabitFilter(root: HTMLElement): void {
+    const current = this.plugin.settings.habitFilter;
+    const group = root.createDiv({
+      cls: "dayspann-habit-filter",
+      attr: { role: "radiogroup", "aria-label": this.plugin.t("view.habitFilterLabel") },
+    });
+    for (const value of ["today", "all"] as const) {
+      const button = group.createEl("button", {
+        cls: "dayspann-habit-filter-button",
+        text: this.plugin.t(value === "today" ? "view.habitFilterToday" : "view.habitFilterAll"),
+        attr: { type: "button", role: "radio", "aria-checked": String(value === current) },
+      });
+      if (value === current) button.addClass("is-active");
+      button.addEventListener("click", () => {
+        if (value === this.plugin.settings.habitFilter) return;
+        void this.plugin.setHabitFilter(value).then(() => this.refresh());
+      });
+    }
   }
 
   /** 習慣の見出しと、その下のカードを出す。見出しをクリックすると折りたためる。 */

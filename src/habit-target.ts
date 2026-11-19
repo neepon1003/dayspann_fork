@@ -375,3 +375,14 @@ export function habitScheduledTodayStatus(
   if (!isHabitScheduled(schedule, todayKey)) return null;
   return doneToday;
 }
+
+/**
+ * 「今日だけ」表示用。今日が予定日の習慣だけを残す（今日やったものも含む）。
+ * scheduledToday は habitScheduledTodayStatus と同じく、予定日なら true/false、違えば null。
+ */
+export function filterHabitsScheduledToday<T>(
+  items: T[],
+  scheduledToday: (item: T) => boolean | null
+): T[] {
+  return items.filter((item) => scheduledToday(item) !== null);
+}
