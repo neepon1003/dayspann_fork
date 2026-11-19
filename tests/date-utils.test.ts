@@ -25,6 +25,14 @@ import {
 } from "../src/date-utils";
 import { createTranslator, durationUnit, formatCountUnit, resolveLocale } from "../src/i18n";
 import {
+  buildHabitQuickAddVariables,
+  filterQuickAddChoiceNames,
+  getQuickAddExecuteChoice,
+  hasQuickAddChoice,
+  listQuickAddChoiceNames,
+  normalizeQuickAddChoiceName,
+} from "../src/quickadd";
+import {
   ALL_HABITS_GROUP_KEY,
   DONE_HABITS_GROUP_KEY,
   normalizeCollapsedHabitGroups,
@@ -1868,4 +1876,86 @@ test("partitionHabitsDoneToday moves habits done today into one group, keeping c
   const en = createTranslator("en");
   assert.equal(en("section.habitDone"), "Done");
   assert.equal(en("section.heading", { title: en("section.habitDone"), count: 3 }), "Done (3)");
+});
+
+test("QuickAdd helpers find choice names in nested settings and build the habit variables", async () => {
+  const choices = [
+    { name: "習慣のメモ", type: "Macro", id: "a" },
+    {
+      name: "フォルダ",
+      type: "Multi",
+      id: "b",
+      choices: [
+        { name: "日記に追記", type: "Capture", id: "c" },
+        { name: "中のフォルダ", type: "Multi", id: "d", choices: [{ name: " 次の一手を更新 ", type: "Macro", id: "e" }] },
+        { name: "習慣のメモ", type: "Template", id: "f" },
+      ],
+    },
+    null,
+    "壊れた行",
+    { name: "", type: "Macro", id: "g" },
+    { type: "Macro", id: "h" },
+    { name: "空のフォルダ", type: "Multi", id: "i" },
+    { name: "壊れたフォルダ", type: "Multi", id: "j", choices: {} },
+  ];
+
+  assert.deepEqual(listQuickAddChoiceNames(choices), ["習慣のメモ", "日記に追記", "次の一手を更新"]);
+  assert.deepEqual(listQuickAddChoiceNames(undefined), []);
+  assert.deepEqual(listQuickAddChoiceNames({}), []);
+
+  assert.equal(hasQuickAddChoice(choices, "次の一手を更新"), true);
+  assert.equal(hasQuickAddChoice(choices, " 日記に追記 "), true);
+  assert.equal(hasQuickAddChoice(choices, "フォルダ"), false);
+  assert.equal(hasQuickAddChoice(choices, "ない名前"), false);
+  assert.equal(hasQuickAddChoice(choices, ""), false);
+  assert.equal(hasQuickAddChoice(undefined, "習慣のメモ"), false);
+
+  assert.deepEqual(filterQuickAddChoiceNames(["Habit memo", "日記に追記"], "habit"), ["Habit memo"]);
+  assert.deepEqual(filterQuickAddChoiceNames(["Habit memo", "日記に追記"], " "), ["Habit memo", "日記に追記"]);
+
+  assert.equal(normalizeQuickAddChoiceName("  習慣のメモ  "), "習慣のメモ");
+  assert.equal(normalizeQuickAddChoiceName(undefined), "");
+  assert.equal(normalizeQuickAddChoiceName(3), "");
+
+  assert.deepEqual(
+    buildHabitQuickAddVariables({ path: "pj-span/腕立て.md", title: "腕立て｜15回3セット", date: "2026-11-19" }),
+    { habitPath: "pj-span/腕立て.md", habitTitle: "腕立て", habitNextAction: "15回3セット", habitDate: "2026-11-19" }
+  );
+  assert.deepEqual(
+    buildHabitQuickAddVariables({ path: "pj-span/将棋.md", title: "将棋", date: "2026-11-19" }),
+    { habitPath: "pj-span/将棋.md", habitTitle: "将棋", habitNextAction: "", habitDate: "2026-11-19" }
+  );
+
+  assert.equal(getQuickAddExecuteChoice({}), null);
+  assert.equal(
+    getQuickAddExecuteChoice({ plugins: { enabledPlugins: new Set(), plugins: { quickadd: { api: {} } } } }),
+    null
+  );
+  assert.equal(
+    getQuickAddExecuteChoice({ plugins: { enabledPlugins: new Set(["quickadd"]), plugins: { quickadd: { api: {} } } } }),
+    null
+  );
+  const calls: unknown[][] = [];
+  const api = {
+    executeChoice(this: unknown, choice: string, variables?: Record<string, unknown>) {
+      calls.push([this === api, choice, variables]);
+      return Promise.resolve();
+    },
+  };
+  const execute = getQuickAddExecuteChoice({
+    plugins: { enabledPlugins: new Set(["quickadd"]), plugins: { quickadd: { api } } },
+  });
+  assert.ok(execute);
+  await execute("習慣のメモ", { habitPath: "a.md" });
+  assert.deepEqual(calls, [[true, "習慣のメモ", { habitPath: "a.md" }]]);
+
+  const t = createTranslator("ja");
+  assert.equal(t("setting.habitQuickAdd"), "「今日やった」のあとに動かす QuickAdd");
+  assert.equal(
+    t("notice.quickAddChoiceMissing", { name: "習慣のメモ" }),
+    "QuickAdd に『習慣のメモ』が見つかりません。PJ-span の設定の名前を確かめてください（今日の記録は残っています）"
+  );
+  const en = createTranslator("en");
+  assert.equal(en("setting.habitQuickAdd"), "QuickAdd choice after logging a habit");
+  assert.equal(en("notice.quickAddMissing"), "QuickAdd is not enabled, so it was not run. Today's record is kept.");
 });

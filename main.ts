@@ -1,4 +1,5 @@
 import {
+  AbstractInputSuggest,
   App,
   Editor,
   getLanguage,
@@ -102,6 +103,16 @@ import {
   isLinkedSourceReference,
   parseSourceReference,
 } from "./src/source-link";
+import {
+  buildHabitQuickAddVariables,
+  filterQuickAddChoiceNames,
+  getQuickAddChoices,
+  getQuickAddExecuteChoice,
+  hasQuickAddChoice,
+  listQuickAddChoiceNames,
+  normalizeQuickAddChoiceName,
+  QuickAddHost,
+} from "./src/quickadd";
 import { DAYSPANN_VIEW_TYPE, DayspannView } from "./src/view";
 
 export interface DayspannSettings {
@@ -120,6 +131,8 @@ export interface DayspannSettings {
   habitFilter: HabitFilter;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;
+  /** 「今日やった」で記録したあとに動かす QuickAdd の選択肢の名前。空なら動かさない。 */
+  habitQuickAddChoice: string;
 }
 
 const DEFAULT_SETTINGS: DayspannSettings = {
@@ -135,6 +148,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   collapsedHabitGroups: [],
   habitFilter: "all",
   activeTab: DEFAULT_RECORD_TYPE,
+  habitQuickAddChoice: "",
 };
 
 export default class DayspannPlugin extends Plugin {
@@ -601,6 +615,8 @@ export default class DayspannPlugin extends Plugin {
     const key = record.file.path;
     if (this.habitLogWrites.has(key)) return;
     this.habitLogWrites.add(key);
+    // 記録できた日。記録できたときだけ、このあと QuickAdd を動かす。
+    let recordedDate = "";
     try {
       const deviceId = this.taskChuteDeviceIdOrNotice();
       if (!deviceId) return;
@@ -622,6 +638,7 @@ export default class DayspannPlugin extends Plugin {
         buildHabitDoneDelta({ title, path: record.file.path, taskId: record.taskchute.taskId, deviceId, now })
       );
       new Notice(this.t("notice.habitLogged", { title: record.title }));
+      recordedDate = today;
       await this.refreshViews();
       this.reloadTaskChuteViewNow();
     } catch (error) {
@@ -630,6 +647,77 @@ export default class DayspannPlugin extends Plugin {
     } finally {
       this.habitLogWrites.delete(key);
     }
+    if (recordedDate) await this.runHabitQuickAdd(record, recordedDate);
+  }
+
+  /**
+   * 「今日やった」で記録したあと、設定の QuickAdd の選択肢を動かす。設定が空なら何もしない。
+   * スクリプトが開いているノートを書き換えられるよう、先に習慣のノートを開き、開き終わってから動かす。
+   * QuickAdd が無い・選択肢が無い・途中で失敗したときは知らせるだけにし、記録はそのまま残す。
+   */
+  private async runHabitQuickAdd(record: DayspannRecord, date: string): Promise<void> {
+    const choiceName = normalizeQuickAddChoiceName(this.settings.habitQuickAddChoice);
+    if (!choiceName) return;
+    const host = this.app as unknown as QuickAddHost;
+    const executeChoice = getQuickAddExecuteChoice(host);
+    if (!executeChoice) {
+      new Notice(this.t("notice.quickAddMissing"));
+      return;
+    }
+    if (!hasQuickAddChoice(getQuickAddChoices(host), choiceName)) {
+      new Notice(this.t("notice.quickAddChoiceMissing", { name: choiceName }));
+      return;
+    }
+    try {
+      if (!(await this.openHabitNoteForQuickAdd(record.file))) {
+        new Notice(this.t("notice.quickAddOpenFailed"));
+        return;
+      }
+      await executeChoice(
+        choiceName,
+        buildHabitQuickAddVariables({ path: record.file.path, title: record.title, date })
+      );
+    } catch (error) {
+      // Esc で閉じたとき（QuickAdd の MacroAbortError）は、知らせずに終える。
+      if (!(error instanceof Error && error.name === "MacroAbortError")) {
+        console.error("[PJ-span] QuickAdd の途中でエラーになりました", error);
+        new Notice(this.t("notice.quickAddFailed"));
+      }
+    }
+    // 次の一手やメモが変わっていれば出し直す（ノートの変更でも読み直すが、念のため）。
+    await this.refreshViews();
+  }
+
+  /**
+   * 習慣のノートを開いて、そのノートが「いま開いているノート」になるまで待つ。
+   * もうどこかのタブで開いていれば、そのタブに移る。なければ、カードを押したときと同じ開き方（getLeaf(false)）で開く。
+   * 2 秒たっても切り替わらなければ false（スクリプトが別のノートを書き換えないよう、QuickAdd は動かさない）。
+   */
+  private async openHabitNoteForQuickAdd(file: TFile): Promise<boolean> {
+    const workspace = this.app.workspace;
+    const opened = workspace
+      .getLeavesOfType("markdown")
+      .find((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path);
+    const leaf = opened ?? workspace.getLeaf(false);
+    if (opened) workspace.setActiveLeaf(opened, { focus: true });
+    else await leaf.openFile(file, { active: true });
+    await workspace.revealLeaf(leaf);
+    if (workspace.getActiveFile()?.path === file.path) return true;
+    return new Promise<boolean>((resolve) => {
+      const check = () => {
+        if (workspace.getActiveFile()?.path !== file.path) return;
+        finish(true);
+      };
+      const fileOpenRef = workspace.on("file-open", check);
+      const leafChangeRef = workspace.on("active-leaf-change", check);
+      const timer = window.setTimeout(() => finish(workspace.getActiveFile()?.path === file.path), 2000);
+      const finish = (result: boolean) => {
+        window.clearTimeout(timer);
+        workspace.offref(fileOpenRef);
+        workspace.offref(leafChangeRef);
+        resolve(result);
+      };
+    });
   }
 
   /** 「今日の記録を取り消す」。PJ-span が書いた今日の記録だけを、TaskChute と同じ delete の差分で消す。 */
@@ -793,6 +881,7 @@ export default class DayspannPlugin extends Plugin {
       collapsedHabitGroups: normalizeCollapsedHabitGroups(saved?.collapsedHabitGroups),
       habitFilter: normalizeHabitFilter(saved?.habitFilter),
       activeTab: normalizeRecordType(saved?.activeTab),
+      habitQuickAddChoice: normalizeQuickAddChoiceName(saved?.habitQuickAddChoice),
     };
   }
 
@@ -1124,6 +1213,24 @@ class DayspannSettingTab extends PluginSettingTab {
         ],
       },
       {
+        name: this.plugin.t("setting.habitQuickAdd"),
+        desc: this.plugin.t("setting.habitQuickAddDesc"),
+        render: (setting) => {
+          setting.addText((text) => {
+            text
+              .setPlaceholder(this.plugin.t("setting.habitQuickAddPlaceholder"))
+              .setValue(this.plugin.settings.habitQuickAddChoice)
+              .onChange((value) => void this.setHabitQuickAddChoice(value));
+            const suggest = new QuickAddChoiceSuggest(this.app, text.inputEl);
+            suggest.onSelect((value) => {
+              suggest.setValue(value);
+              void this.setHabitQuickAddChoice(value);
+              suggest.close();
+            });
+          });
+        },
+      },
+      {
         name: this.plugin.t("setting.calculation"),
         desc: this.plugin.t("setting.calculationDesc"),
         searchable: false,
@@ -1179,6 +1286,11 @@ class DayspannSettingTab extends PluginSettingTab {
     await this.plugin.refreshViews();
   }
 
+  private async setHabitQuickAddChoice(value: string): Promise<void> {
+    this.plugin.settings.habitQuickAddChoice = normalizeQuickAddChoiceName(value);
+    await this.plugin.saveSettings();
+  }
+
   private async setStalledDays(value: string): Promise<void> {
     const days = parseSoonDays(value);
     if (days === null) return;
@@ -1192,5 +1304,17 @@ class DayspannSettingTab extends PluginSettingTab {
     await this.plugin.saveSettings();
     await this.plugin.refreshViews();
     this.update();
+  }
+}
+
+/** 設定の QuickAdd の選択肢の欄で、QuickAdd の設定にある選択肢の名前を候補に出す。QuickAdd が無ければ候補なし。 */
+class QuickAddChoiceSuggest extends AbstractInputSuggest<string> {
+  protected getSuggestions(query: string): string[] {
+    const names = listQuickAddChoiceNames(getQuickAddChoices(this.app as unknown as QuickAddHost));
+    return filterQuickAddChoiceNames(names, query);
+  }
+
+  renderSuggestion(value: string, el: HTMLElement): void {
+    el.setText(value);
   }
 }
