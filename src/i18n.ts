@@ -165,6 +165,7 @@ const JA_MESSAGES = {
   "heatmap.streakDaysZero": "連続 {current}日・最長 {longest}日",
   "heatmap.streakWeeksZero": "連続 {current}週・最長 {longest}週",
   "heatmap.recentLabel": "直近{days}日",
+  "heatmap.totalLabel": "通算",
   "heatmap.streakLabel": "連続",
   "heatmap.bestLabel": "最長",
   "habit.pendingToday": "今日まだ",
@@ -391,6 +392,7 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "heatmap.streakDaysZero": "{current}-day streak · best {longest} days",
   "heatmap.streakWeeksZero": "{current}-week streak · best {longest} weeks",
   "heatmap.recentLabel": "Last {days} days",
+  "heatmap.totalLabel": "Total",
   "heatmap.streakLabel": "Streak",
   "heatmap.bestLabel": "Best",
   "habit.pendingToday": "Not yet today",
@@ -486,8 +488,16 @@ export function durationUnit(
   return value === 1 ? "year" : "years";
 }
 
-/** 回数と単位を、画面に出す形にする。日本語は「8日」「5週」、英語は「8 days」「5 weeks」。 */
-export function formatCountUnit(locale: DayspannLocale, value: number, unit: "day" | "week"): string {
+/** 回数と単位を、画面に出す形にする。日本語は「8日」「5週」「120回」、英語は「8 days」「5 weeks」「120 times」。 */
+export function formatCountUnit(
+  locale: DayspannLocale,
+  value: number,
+  unit: "day" | "week" | "times"
+): string {
+  if (unit === "times") {
+    if (locale === "ja") return `${value}回`;
+    return value === 1 ? `${value} time` : `${value} times`;
+  }
   const label = durationUnit(locale, unit, value);
   return locale === "ja" ? `${value}${label}` : `${value} ${label}`;
 }

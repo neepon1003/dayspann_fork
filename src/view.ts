@@ -20,7 +20,7 @@ import {
 import { groupHabitsByCategory, partitionHabitsDoneToday } from "./habit-category";
 import {
   buildHeatmapWeeks,
-  countActiveDays,
+  countTotalActiveDays,
   countHabitDays,
   HabitLogDays,
   heatmapLevel,
@@ -482,14 +482,6 @@ export class DayspannView extends ItemView {
     }
 
     const headActions = head.createDiv("dayspann-habit-head-actions");
-    if (progress) {
-      const progressEl = headActions.createDiv({
-        text: progress.text,
-        cls: progress.met ? "dayspann-habit-progress is-met" : "dayspann-habit-progress",
-      });
-      setTooltip(progressEl, progress.tooltip);
-      progressEl.setAttribute("aria-label", progress.tooltip);
-    }
     const stalled = record.archived
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
@@ -501,6 +493,9 @@ export class DayspannView extends ItemView {
       mark.setAttribute("aria-label", tooltip);
     }
 
+    // 「✓ 今日やった」は名前の右、「…」の左に置く。「今日まだ」は出さない（ボタンで分かる）。
+    if (counts) this.renderHabitLogButton(headActions, record, doneToday);
+
     const actions = headActions.createDiv("dayspann-card-actions");
     const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
@@ -511,26 +506,26 @@ export class DayspannView extends ItemView {
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
 
-    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出し、右下に「✓」ボタンを置く。
+    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
+    // 「今週 1/2」「今月 0/1」は、毎日の「今日まだ」と違ってボタンだけでは分からないので、数字の上に出す。
     if (counts) {
-      this.renderHeatmap(content, record, counts, todayKey);
-      this.renderHabitLogButton(content, record, doneToday);
+      const periodProgress = progress && progress.period !== "day" ? progress : null;
+      this.renderHeatmap(content, record, counts, todayKey, periodProgress);
     }
   }
 
   /**
-   * カードの右下の「✓」だけの丸いボタン。押すと TaskChute の実行ログに今日の分を 1 件書く。
-   * 今日の記録がもうあれば、緑の「✓」にして、押しても何もしない（取り消しは「…」メニューから）。
-   * 見た目の文字は出さず、名前はツールチップと aria-label に「今日やった」／「今日 ✓（記録済み）」と出す。
+   * カードの名前の右の「✓ 今日やった」ピル。押すと TaskChute の実行ログに今日の分を 1 件書く。
+   * 今日の記録がもうあれば、緑の「今日 ✓」にして、押しても何もしない（取り消しは「…」メニューから）。
    */
   private renderHabitLogButton(parent: HTMLElement, record: DayspannRecord, doneToday: boolean): void {
-    const footer = parent.createDiv("dayspann-habit-footer");
     const tooltip = this.plugin.t(doneToday ? "habit.loggedTodayTooltip" : "habit.logTodayTooltip");
-    const button = footer.createEl("button", {
+    const button = parent.createEl("button", {
       cls: doneToday ? "dayspann-habit-log-button is-done" : "dayspann-habit-log-button",
       attr: { type: "button", "aria-label": tooltip, "aria-disabled": String(doneToday) },
     });
-    setIcon(button.createSpan("dayspann-habit-log-icon"), "check");
+    if (!doneToday) setIcon(button.createSpan("dayspann-habit-log-icon"), "check");
+    button.createSpan({ text: this.plugin.t(doneToday ? "habit.doneToday" : "habit.logToday") });
     setTooltip(button, tooltip);
     // カードの Enter（ノートを開く）に伝わらないようにする。
     button.addEventListener("keydown", (event) => event.stopPropagation());
@@ -576,19 +571,23 @@ export class DayspannView extends ItemView {
     return habitScheduledTodayStatus(record.habitSchedule, todayKey, (counts[todayKey] ?? 0) > 0);
   }
 
-  /** 名前の横の日数とツールチップ。目標に届いていれば ✓ を付けて出す。 */
-  private habitProgressCopy(progress: HabitTargetProgress): { text: string; tooltip: string; met: boolean } {
+  /** 週・月の目標の日数とツールチップ。目標に届いていれば ✓ を付けて出す。毎日の「今日まだ」はカードには出さない。 */
+  private habitProgressCopy(
+    progress: HabitTargetProgress
+  ): { text: string; tooltip: string; met: boolean; period: HabitTargetProgress["period"] } {
     if (progress.period === "day") {
       return progress.met
         ? {
             text: this.plugin.t("habit.doneToday"),
             tooltip: this.plugin.t("habit.doneTodayTooltip"),
             met: true,
+            period: "day" as const,
           }
         : {
             text: this.plugin.t("habit.pendingToday"),
             tooltip: this.plugin.t("habit.pendingTodayTooltip"),
             met: false,
+            period: "day" as const,
           };
     }
     if (progress.period === "month") {
@@ -599,6 +598,7 @@ export class DayspannView extends ItemView {
         }),
         tooltip: this.plugin.t(progress.met ? "habit.doneMonthTooltip" : "habit.pendingMonthTooltip"),
         met: progress.met,
+        period: "month",
       };
     }
     return {
@@ -611,11 +611,18 @@ export class DayspannView extends ItemView {
         { remaining: progress.remaining }
       ),
       met: progress.met,
+      period: "week",
     };
   }
 
-  /** 習慣のヒートマップ。直近 4 週を左に出し（各行の左に週番号、今週の行は色づけ）、右に直近 30 日・連続・最長を並べる。 */
-  private renderHeatmap(parent: HTMLElement, record: DayspannRecord, counts: Record<string, number>, todayKey: string): void {
+  /** 習慣のヒートマップ。直近 4 週を左に出し（各行の左に週番号、今週の行は色づけ）、右に連続を大きく、通算・最長を小さく並べる。 */
+  private renderHeatmap(
+    parent: HTMLElement,
+    record: DayspannRecord,
+    counts: Record<string, number>,
+    todayKey: string,
+    periodProgress: { text: string; tooltip: string; met: boolean } | null = null
+  ): void {
     const body = parent.createDiv("dayspann-habit-body");
     const wrap = body.createDiv("dayspann-heatmap");
     const grid = wrap.createDiv({ cls: "dayspann-heatmap-grid", attr: { role: "img" } });
@@ -664,30 +671,47 @@ export class DayspannView extends ItemView {
       }
     }
     const locale = this.plugin.locale();
-    const recentDays = countActiveDays(counts, todayKey, 30);
+    const totalDays = countTotalActiveDays(counts);
     const streak = record.streakUnit === "day"
       ? streakDays(counts, todayKey)
       : streakWeeks(counts, todayKey, weekStreakTarget(record.habitTarget));
     const unit = record.streakUnit;
-    const recentLabel = this.plugin.t("heatmap.recentLabel", { days: 30 });
-    const recentValue = formatCountUnit(locale, recentDays, "day");
+    const totalLabel = this.plugin.t("heatmap.totalLabel");
+    const totalValue = formatCountUnit(locale, totalDays, "times");
     const streakLabel = this.plugin.t("heatmap.streakLabel");
     const streakValue = formatCountUnit(locale, streak.current, unit);
     const bestLabel = this.plugin.t("heatmap.bestLabel");
     const bestValue = formatCountUnit(locale, streak.longest, unit);
     grid.setAttribute(
       "aria-label",
-      `${recentLabel} ${recentValue} ${streakLabel} ${streakValue} ${bestLabel} ${bestValue}`
+      `${totalLabel} ${totalValue} ${streakLabel} ${streakValue} ${bestLabel} ${bestValue}`
     );
     const stats = body.createDiv("dayspann-habit-stats");
-    this.renderHabitStat(stats, recentLabel, recentValue);
-    this.renderHabitStat(stats, streakLabel, streakValue, streak.current > 0);
-    this.renderHabitStat(stats, bestLabel, bestValue);
+    if (periodProgress) {
+      const periodEl = stats.createDiv({
+        text: periodProgress.text,
+        cls: periodProgress.met ? "dayspann-habit-period is-met" : "dayspann-habit-period",
+      });
+      setTooltip(periodEl, periodProgress.tooltip);
+      periodEl.setAttribute("aria-label", periodProgress.tooltip);
+    }
+    this.renderHabitStat(stats, streakLabel, streakValue, streak.current > 0, "streak");
+    this.renderHabitStat(stats, totalLabel, totalValue, false, "muted");
+    this.renderHabitStat(stats, bestLabel, bestValue, false, "muted");
   }
 
-  /** ヒートマップの右に並べる 1 行（左が見出し、右が数字）。連続が続いているときは数字をオレンジにする。 */
-  private renderHabitStat(parent: HTMLElement, label: string, value: string, emphasize = false): void {
-    const row = parent.createDiv("dayspann-habit-stat");
+  /** ヒートマップの右に並べる 1 行。連続は大きく、通算と最長は小さく薄く出す。連続が続いているときは数字をオレンジにする。 */
+  private renderHabitStat(
+    parent: HTMLElement,
+    label: string,
+    value: string,
+    emphasize = false,
+    variant?: "streak" | "muted"
+  ): void {
+    const cls = ["dayspann-habit-stat"];
+    if (variant === "streak") cls.push("dayspann-habit-stat--streak");
+    if (variant === "muted") cls.push("dayspann-habit-stat--muted");
+    const row = parent.createDiv(cls.join(" "));
     row.createDiv({ text: label, cls: "dayspann-habit-stat-label" });
     const valueEl = row.createDiv({ text: value, cls: "dayspann-habit-stat-value" });
     if (emphasize) valueEl.addClass("is-active");

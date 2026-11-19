@@ -220,6 +220,20 @@ export function countActiveDays(counts: Record<string, number>, todayKey: string
   return active;
 }
 
+/**
+ * ログに残っている、1 回以上やり終えた日の数（通算）。
+ * 同じ日に何回やっても 1 日。日付として読めないキーは数えない。
+ * 呼び出し側が読み込んだ月（TaskChute のログフォルダにある月のファイル全部）が対象。
+ */
+export function countTotalActiveDays(counts: Record<string, number>): number {
+  let total = 0;
+  for (const [dateKey, value] of Object.entries(counts)) {
+    if (!parseDateKey(dateKey) || (value ?? 0) <= 0) continue;
+    total += 1;
+  }
+  return total;
+}
+
 /** 連続の数え方。daily は日、それ以外（未設定・毎週・毎月など）は週。 */
 export type StreakUnit = "day" | "week";
 

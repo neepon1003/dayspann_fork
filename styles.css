@@ -1065,27 +1065,10 @@
 
 .dayspann-habit-head-actions {
   display: flex;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   min-width: 0;
-}
-
-/* 今週 1/2 などの日数。名前の右、「…」の左に小さく出す。達成したら緑にして ✓ を付ける。 */
-.dayspann-habit-progress {
-  flex: 0 1 auto;
-  min-width: 0;
-  padding: 0 4px;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dayspann-habit-progress.is-met {
-  color: var(--color-green, #22c55e);
 }
 
 .dayspann-habit-head-actions .dayspann-card-actions {
@@ -1112,7 +1095,7 @@
   flex: 1 1 7rem;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   margin-left: 4px;
   padding-left: 14px;
@@ -1126,6 +1109,20 @@
   left: 0;
   width: 1px;
   background: var(--background-modifier-border);
+}
+
+/* 「今週 1/2」「今月 0/1」など。毎日の「今日まだ」は出さず、週・月の目標だけ数字の上に出す。 */
+.dayspann-habit-period {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dayspann-habit-period.is-met {
+  color: var(--color-green, #22c55e);
 }
 
 .dayspann-habit-stat {
@@ -1157,46 +1154,75 @@
   color: var(--color-orange);
 }
 
-/* 習慣のカードの右下の「✓」だけの丸いボタン（約 36px）。押す前は「今日」と同じアクセント色、記録したら緑で塗りつぶす。
-   Obsidian の `button:not(.clickable-icon)` と、スマホの `.is-mobile button:not(.clickable-icon)` が
-   背景を `--interactive-normal`（暗い色）で上書きしないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
-.dayspann-habit-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-  min-width: 0;
+/* 連続はいちばん目立たせる。数字は約 1.4em、見出しは小さく下に出す。 */
+.dayspann-habit-stat--streak {
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 2px;
+  margin-bottom: 4px;
 }
 
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon) {
+.dayspann-habit-stat--streak .dayspann-habit-stat-value {
+  font-size: 1.4em;
+  line-height: 1.1;
+}
+
+.dayspann-habit-stat--streak .dayspann-habit-stat-label {
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* 通算と最長は、連続より小さく薄くする。 */
+.dayspann-habit-stat--muted .dayspann-habit-stat-label {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.dayspann-habit-stat--muted .dayspann-habit-stat-value {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 名前の右の小さな「✓ 今日やった」ピル（高さ約 26px）。押す前は「今日」と同じアクセント色、記録したら緑の「今日 ✓」。
+   名前が長くてもピルは縮めず、名前のほうを 2 行まで折り返す。
+   Obsidian の `button:not(.clickable-icon)` と、スマホの `.is-mobile button:not(.clickable-icon)` が
+   背景を `--interactive-normal`（暗い色）で上書きしないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   flex: 0 0 auto;
   box-sizing: border-box;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
+  height: 26px;
+  min-height: 26px;
+  width: auto;
+  min-width: 0;
+  padding: 0 8px 0 6px;
   border: 1px solid var(--interactive-accent);
-  border-radius: 50%;
+  border-radius: 999px;
   background: var(--interactive-accent);
   background-color: var(--interactive-accent);
   box-shadow: none;
   color: var(--text-on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
 }
 
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon):hover {
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon):hover {
   background: var(--interactive-accent-hover, var(--interactive-accent));
   background-color: var(--interactive-accent-hover, var(--interactive-accent));
   border-color: var(--interactive-accent-hover, var(--interactive-accent));
   color: var(--text-on-accent);
 }
 
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon):focus-visible {
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon):focus-visible {
   outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
@@ -1207,18 +1233,19 @@
 }
 
 .dayspann-habit-log-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 12px;
+  height: 12px;
 }
 
 /* 書いている途中は押せないように見せる。 */
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-busy {
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon).is-busy {
   opacity: 0.6;
   cursor: progress;
 }
 
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-done,
-.dayspann-habit-footer button.dayspann-habit-log-button:not(.clickable-icon).is-done:hover {
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon).is-done,
+.dayspann-habit-head-actions button.dayspann-habit-log-button:not(.clickable-icon).is-done:hover {
+  padding: 0 8px;
   border-color: var(--color-green, #22c55e);
   background: var(--color-green, #22c55e);
   background-color: var(--color-green, #22c55e);

@@ -88,6 +88,7 @@ import {
   collectLogMonthKeys,
   countActiveDays,
   countHabitDays,
+  countTotalActiveDays,
   HEATMAP_WEEKS,
   heatmapLevel,
   heatmapMonthKeys,
@@ -1205,15 +1206,28 @@ test("習慣の数字は単位つきで出し、見出しの言葉を日英で�
   assert.equal(formatCountUnit("en", 8, "day"), "8 days");
   assert.equal(formatCountUnit("en", 1, "week"), "1 week");
   assert.equal(formatCountUnit("en", 5, "week"), "5 weeks");
+  assert.equal(formatCountUnit("ja", 120, "times"), "120回");
+  assert.equal(formatCountUnit("en", 1, "times"), "1 time");
+  assert.equal(formatCountUnit("en", 120, "times"), "120 times");
 
   const t = createTranslator("ja");
   assert.equal(t("heatmap.recentLabel", { days: 30 }), "直近30日");
+  assert.equal(t("heatmap.totalLabel"), "通算");
   assert.equal(t("heatmap.streakLabel"), "連続");
   assert.equal(t("heatmap.bestLabel"), "最長");
   const en = createTranslator("en");
   assert.equal(en("heatmap.recentLabel", { days: 30 }), "Last 30 days");
+  assert.equal(en("heatmap.totalLabel"), "Total");
   assert.equal(en("heatmap.streakLabel"), "Streak");
   assert.equal(en("heatmap.bestLabel"), "Best");
+});
+
+test("countTotalActiveDays counts distinct done days in the loaded log, not extra runs on the same day", () => {
+  assert.equal(countTotalActiveDays({ "2026-01-01": 1, "2026-06-15": 3, "2026-11-19": 1 }), 3);
+  assert.equal(countTotalActiveDays({ "2026-11-19": 2 }), 1);
+  assert.equal(countTotalActiveDays({ "2026-11-19": 0, "2026-11-18": 1 }), 1);
+  assert.equal(countTotalActiveDays({}), 0);
+  assert.equal(countTotalActiveDays({ "2026-11-19": 1, bad: 4, "2026-13-01": 1 }), 1);
 });
 
 test("習慣の目標日数は TaskChute のルーチン設定から数え、決めた曜日以外にやっても週の日数に入れる", () => {
