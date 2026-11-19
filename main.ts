@@ -9,6 +9,7 @@ import {
   Notice,
   normalizePath,
   parseYaml,
+  Platform,
   Plugin,
   PluginSettingTab,
   SettingDefinitionItem,
@@ -38,6 +39,7 @@ import {
   confirmGoalComplete,
   DayspannEntryModal,
   KeepEntryOpenError,
+  promptHabitMemo,
 } from "./src/modals";
 import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
 import { DEFAULT_RECORD_TYPE, normalizeRecordType, RecordType } from "./src/record-type";
@@ -71,6 +73,7 @@ import {
   getTaskChuteLogFolder,
   isTaskChuteEnabled,
   readTargetDate,
+  reloadTaskChuteViewIfOpen,
   TASKCHUTE_PLUGIN_ID,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
@@ -113,6 +116,23 @@ import {
   normalizeQuickAddChoiceName,
   QuickAddHost,
 } from "./src/quickadd";
+import {
+  appendDailyLogEntry,
+  applyHabitMemo,
+  buildDailyLogEntry,
+  buildNewDailyLog,
+  chooseHabitAfterLog,
+  currentNextAction,
+  dailyLogPath,
+  DEFAULT_DAILY_LOG_FOLDER,
+  formatMemoTime,
+  habitMemoNotice,
+  isInDailyLogFolder,
+  normalizeDailyLogFolder,
+  normalizeHabitMemoEnabled,
+  prepareHabitMemoInput,
+} from "./src/habit-memo";
+import { displayTitle } from "./src/note-template";
 import { DAYSPANN_VIEW_TYPE, DayspannView } from "./src/view";
 
 export interface DayspannSettings {
@@ -133,6 +153,10 @@ export interface DayspannSettings {
   activeTab: RecordType;
   /** 「今日やった」で記録したあとに動かす QuickAdd の選択肢の名前。空なら動かさない。 */
   habitQuickAddChoice: string;
+  /** 「今日やった」で記録したあとに、PJ-span の「メモと次回」の画面を出すか。QuickAdd の名前が入っていれば、そちらが先。 */
+  habitMemoEnabled: boolean;
+  /** メモを足す日次ログのフォルダ（その日の YYYY-MM-DD.md に足す）。 */
+  habitDailyLogFolder: string;
 }
 
 const DEFAULT_SETTINGS: DayspannSettings = {
@@ -149,6 +173,8 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   habitFilter: "all",
   activeTab: DEFAULT_RECORD_TYPE,
   habitQuickAddChoice: "",
+  habitMemoEnabled: true,
+  habitDailyLogFolder: DEFAULT_DAILY_LOG_FOLDER,
 };
 
 export default class DayspannPlugin extends Plugin {
@@ -615,7 +641,7 @@ export default class DayspannPlugin extends Plugin {
     const key = record.file.path;
     if (this.habitLogWrites.has(key)) return;
     this.habitLogWrites.add(key);
-    // 記録できた日。記録できたときだけ、このあと QuickAdd を動かす。
+    // 記録できた日。記録できたときだけ、このあと QuickAdd か「メモと次回」の画面を出す。
     let recordedDate = "";
     try {
       const deviceId = this.taskChuteDeviceIdOrNotice();
@@ -647,7 +673,84 @@ export default class DayspannPlugin extends Plugin {
     } finally {
       this.habitLogWrites.delete(key);
     }
-    if (recordedDate) await this.runHabitQuickAdd(record, recordedDate);
+    if (recordedDate) await this.runAfterHabitLog(record, recordedDate);
+  }
+
+  /**
+   * 「今日やった」で記録したあとの続き。設定の QuickAdd の名前が入っていれば QuickAdd を動かし、
+   * 空なら PJ-span の「メモと次回」の画面を出す（設定でオフにしていれば何もしない）。
+   */
+  private async runAfterHabitLog(record: DayspannRecord, date: string): Promise<void> {
+    const action = chooseHabitAfterLog({
+      quickAddChoice: this.settings.habitQuickAddChoice,
+      memoEnabled: this.settings.habitMemoEnabled,
+    });
+    if (action === "quickadd") await this.runHabitQuickAdd(record, date);
+    else if (action === "memo") await this.runHabitMemo(record);
+  }
+
+  /**
+   * 「メモと次回」の画面を出し、入力したものを習慣のノートと日次ログに書く（QuickAdd スクリプト「感想メモ」と同じ書き方）。
+   * ノートは開かず、app.vault.process でまとめて書き換えるので、PJ-span の画面はそのまま。
+   * 「スキップ」や Esc、メモも次回も空のときは何も書かない（今日の記録はそのまま残る）。
+   */
+  private async runHabitMemo(record: DayspannRecord): Promise<void> {
+    const file = record.file;
+    if (isInDailyLogFolder(file.path, this.settings.habitDailyLogFolder)) {
+      new Notice(this.t("notice.habitMemoInDailyLog"));
+      return;
+    }
+    let currentNext = "";
+    try {
+      currentNext = currentNextAction(await this.app.vault.read(file));
+    } catch (error) {
+      console.error("[PJ-span] 習慣のノートを読めませんでした", error);
+      new Notice(this.t("notice.habitMemoFailed"));
+      return;
+    }
+    const answer = await promptHabitMemo(
+      this.app,
+      displayTitle(record.title),
+      currentNext,
+      (key, variables) => this.t(key, variables)
+    );
+    if (!answer) return;
+    const input = prepareHabitMemoInput(answer.memo, answer.next);
+    if (!input) {
+      new Notice(this.t("notice.habitMemoEmpty"));
+      return;
+    }
+    try {
+      const now = new Date();
+      const date = toDateKey(now);
+      // 画面を開いているあいだにノートが変わっていてもよいよう、書く直前の中身から作り直す。
+      await this.app.vault.process(file, (data) => applyHabitMemo(data, { ...input, basename: file.basename, date }));
+      if (input.memo) await this.appendHabitDailyLog(file, input.memo, now);
+      await reloadTaskChuteViewIfOpen(this.app.workspace);
+      const notice = habitMemoNotice(input.memo !== "", Platform.isMobile);
+      new Notice(this.t(notice.key), notice.duration);
+    } catch (error) {
+      console.error("[PJ-span] メモと次回を書けませんでした", error);
+      new Notice(this.t("notice.habitMemoFailed"));
+    }
+    await this.refreshViews();
+  }
+
+  /** 日次ログ（設定のフォルダの YYYY-MM-DD.md）の末尾に「- 時刻 [[習慣]] メモ」を足す。無ければ作る。 */
+  private async appendHabitDailyLog(source: TFile, memo: string, now: Date): Promise<void> {
+    const date = toDateKey(now);
+    const path = normalizePath(dailyLogPath(this.settings.habitDailyLogFolder, date));
+    const link = this.app.fileManager.generateMarkdownLink(source, path);
+    const entry = buildDailyLogEntry(formatMemoTime(now), link, memo);
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (!existing) {
+      const folder = normalizePath(normalizeDailyLogFolder(this.settings.habitDailyLogFolder));
+      if (!this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
+      await this.app.vault.create(path, buildNewDailyLog(date, entry));
+      return;
+    }
+    if (!(existing instanceof TFile)) return;
+    await this.app.vault.process(existing, (data) => appendDailyLogEntry(data, entry));
   }
 
   /**
@@ -882,6 +985,8 @@ export default class DayspannPlugin extends Plugin {
       habitFilter: normalizeHabitFilter(saved?.habitFilter),
       activeTab: normalizeRecordType(saved?.activeTab),
       habitQuickAddChoice: normalizeQuickAddChoiceName(saved?.habitQuickAddChoice),
+      habitMemoEnabled: normalizeHabitMemoEnabled(saved?.habitMemoEnabled),
+      habitDailyLogFolder: normalizeDailyLogFolder(saved?.habitDailyLogFolder),
     };
   }
 
@@ -1112,7 +1217,7 @@ export default class DayspannPlugin extends Plugin {
   }
 }
 
-type DayspannSettingKey = "storageFolder";
+type DayspannSettingKey = "storageFolder" | "habitDailyLogFolder";
 
 class DayspannSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: DayspannPlugin) {
@@ -1213,6 +1318,27 @@ class DayspannSettingTab extends PluginSettingTab {
         ],
       },
       {
+        name: this.plugin.t("setting.habitMemo"),
+        desc: this.plugin.t("setting.habitMemoDesc"),
+        render: (setting) => {
+          setting.addToggle((toggle) =>
+            toggle
+              .setValue(this.plugin.settings.habitMemoEnabled)
+              .onChange((value) => void this.setHabitMemoEnabled(value))
+          );
+        },
+      },
+      {
+        name: this.plugin.t("setting.habitDailyLogFolder"),
+        desc: this.plugin.t("setting.habitDailyLogFolderDesc"),
+        control: {
+          type: "folder",
+          key: "habitDailyLogFolder",
+          defaultValue: DEFAULT_DAILY_LOG_FOLDER,
+          placeholder: DEFAULT_DAILY_LOG_FOLDER,
+        },
+      },
+      {
         name: this.plugin.t("setting.habitQuickAdd"),
         desc: this.plugin.t("setting.habitQuickAddDesc"),
         render: (setting) => {
@@ -1243,7 +1369,13 @@ class DayspannSettingTab extends PluginSettingTab {
   }
 
   async setControlValue(key: DayspannSettingKey, value: unknown): Promise<void> {
-    if (key !== "storageFolder" || typeof value !== "string") return;
+    if (typeof value !== "string") return;
+    if (key === "habitDailyLogFolder") {
+      this.plugin.settings.habitDailyLogFolder = normalizeDailyLogFolder(value);
+      await this.plugin.saveSettings();
+      return;
+    }
+    if (key !== "storageFolder") return;
     this.plugin.settings.storageFolder = value.trim() || DEFAULT_SETTINGS.storageFolder;
     await this.plugin.saveSettings();
     await this.plugin.refreshViews();
@@ -1288,6 +1420,11 @@ class DayspannSettingTab extends PluginSettingTab {
 
   private async setHabitQuickAddChoice(value: string): Promise<void> {
     this.plugin.settings.habitQuickAddChoice = normalizeQuickAddChoiceName(value);
+    await this.plugin.saveSettings();
+  }
+
+  private async setHabitMemoEnabled(value: boolean): Promise<void> {
+    this.plugin.settings.habitMemoEnabled = value;
     await this.plugin.saveSettings();
   }
 

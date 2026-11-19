@@ -4,6 +4,7 @@ import {
   FuzzySuggestModal,
   Modal,
   Notice,
+  Platform,
   Setting,
   TFile,
 } from "obsidian";
@@ -552,5 +553,97 @@ class SourceNoteSuggestModal extends FuzzySuggestModal<TFile> {
 
   onChooseItem(file: TFile): void {
     this.onChoose(file);
+  }
+}
+
+/** 「メモと次回」の画面で入力したもの。 */
+export interface HabitMemoAnswer {
+  memo: string;
+  next: string;
+}
+
+/**
+ * 「今日やった」のあとに出す「メモと次回」の画面。「保存」なら入力したもの、「スキップ」や閉じたときは null。
+ * 次回の欄には、いまの次の一手（チェックしていない一番上）を最初から入れておく。
+ */
+export function promptHabitMemo(
+  app: App,
+  title: string,
+  currentNext: string,
+  t: Translator
+): Promise<HabitMemoAnswer | null> {
+  return new Promise((resolve) => {
+    new HabitMemoModal(app, title, currentNext, t, resolve).open();
+  });
+}
+
+class HabitMemoModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private title: string,
+    private currentNext: string,
+    private t: Translator,
+    private resolve: (answer: HabitMemoAnswer | null) => void
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.modalEl.addClass("dayspann-habit-memo-modal");
+    this.titleEl.setText(this.t("habitMemo.title", { title: this.title }));
+
+    const memoWrap = contentEl.createDiv("dayspann-modal-field");
+    const memoLabel = memoWrap.createEl("label", { text: this.t("habitMemo.memo") });
+    const memo = memoWrap.createEl("textarea", { cls: "dayspann-habit-memo-textarea" });
+    memo.id = "dayspann-habit-memo-memo";
+    memoLabel.htmlFor = memo.id;
+    memo.rows = 3;
+    if (!Platform.isMobile) {
+      memoWrap.createDiv({ text: this.t("habitMemo.memoHint"), cls: "setting-item-description" });
+    }
+
+    const nextWrap = contentEl.createDiv("dayspann-modal-field");
+    const nextLabel = nextWrap.createEl("label", { text: this.t("habitMemo.next") });
+    const next = nextWrap.createEl("input", { type: "text", cls: "dayspann-habit-memo-input" });
+    next.id = "dayspann-habit-memo-next";
+    nextLabel.htmlFor = next.id;
+    next.value = this.currentNext;
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const skip = actions.createEl("button", { text: this.t("habitMemo.skip") });
+    skip.addEventListener("click", () => this.answer(null));
+    const save = actions.createEl("button", { text: this.t("habitMemo.save"), cls: "mod-cta" });
+    const submit = () => this.answer({ memo: memo.value, next: next.value });
+    save.addEventListener("click", submit);
+
+    // 日本語を変換している途中の Enter では保存しない。
+    memo.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing || !(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      submit();
+    });
+    next.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      submit();
+    });
+    window.setTimeout(() => memo.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    // ×ボタンや Esc で閉じたときは「スキップ」と同じにする（何も書かない）。
+    if (!this.answered) this.resolve(null);
+  }
+
+  private answer(value: HabitMemoAnswer | null): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.resolve(value);
+    this.close();
   }
 }

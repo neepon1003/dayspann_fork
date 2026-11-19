@@ -64,6 +64,18 @@ export function canReloadTaskChuteView(host: TaskChuteHost): boolean {
   return host.workspace.getLeavesOfType(TASKCHUTE_VIEW_TYPE).length > 0;
 }
 
+/**
+ * TaskChute の画面が開いていれば、一覧を読み直す（QuickAdd スクリプト「感想メモ」の reloadTaskChuteIfOpen と同じ）。
+ * 画面が開いていない、または読み直す関数が無いときは何もしない。
+ */
+export async function reloadTaskChuteViewIfOpen(workspace: { getLeavesOfType(type: string): unknown[] }): Promise<void> {
+  const leaf = workspace.getLeavesOfType(TASKCHUTE_VIEW_TYPE)[0] as { view?: unknown } | undefined;
+  const view = leaf?.view as { reloadTasksAndRestore?: (options: { runBoundaryCheck: boolean }) => unknown } | undefined;
+  if (view && typeof view.reloadTasksAndRestore === "function") {
+    await view.reloadTasksAndRestore({ runBoundaryCheck: true });
+  }
+}
+
 /** TaskChute Plus が有効か。 */
 export function isTaskChuteEnabled(host: Pick<TaskChuteHost, "plugins">): boolean {
   return host.plugins?.enabledPlugins?.has(TASKCHUTE_PLUGIN_ID) === true;

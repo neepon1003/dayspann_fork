@@ -24,6 +24,33 @@ import {
   toDateKey,
 } from "../src/date-utils";
 import { createTranslator, durationUnit, formatCountUnit, resolveLocale } from "../src/i18n";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { cwd } from "node:process";
+import { runInNewContext } from "node:vm";
+import {
+  allNextChecked,
+  appendDailyLogEntry,
+  applyHabitMemo,
+  buildDailyLogEntry,
+  buildNewDailyLog,
+  chooseHabitAfterLog,
+  currentLabel,
+  currentNextAction,
+  dailyLogPath,
+  DEFAULT_DAILY_LOG_FOLDER,
+  formatMemoTime,
+  habitMemoNotice,
+  insertAfterLogHeading,
+  isInDailyLogFolder,
+  normalizeDailyLogFolder,
+  normalizeHabitMemo,
+  normalizeHabitMemoEnabled,
+  prepareHabitMemoInput,
+  replaceFirstOpenNext,
+  submittedNextText,
+  upsertTitle,
+} from "../src/habit-memo";
 import {
   buildHabitQuickAddVariables,
   filterQuickAddChoiceNames,
@@ -125,6 +152,7 @@ import {
   isTaskChuteEnabled,
   isTaskChuteTask,
   readTargetDate,
+  reloadTaskChuteViewIfOpen,
   TASKCHUTE_DEFAULT_TASK_FOLDER,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
@@ -1958,4 +1986,349 @@ test("QuickAdd helpers find choice names in nested settings and build the habit 
   const en = createTranslator("en");
   assert.equal(en("setting.habitQuickAdd"), "QuickAdd choice after logging a habit");
   assert.equal(en("notice.quickAddMissing"), "QuickAdd is not enabled, so it was not run. Today's record is kept.");
+});
+
+/** QuickAdd スクリプト「感想メモ」を、そのまま（tests/fixtures の写し）動かして、書いた結果を返す。 */
+interface KansouRun {
+  note: string;
+  dailyLog: string | undefined;
+  notices: string[];
+  prompts: { header: string; value: string | undefined }[];
+  reloads: number;
+}
+
+interface KansouCase {
+  path?: string;
+  content: string;
+  memo: string | null;
+  next?: string | null;
+  dailyLog?: string;
+  isMobile?: boolean;
+}
+
+const KANSOU_DATE = "2026-11-19";
+const KANSOU_TIME = "07:05";
+
+function runKansouScript(input: KansouCase): Promise<KansouRun> {
+  const source = readFileSync(join(cwd(), "tests/fixtures/kansou-memo.quickadd.js.txt"), "utf8");
+  const notePath = input.path ?? "pj-span/腕立て.md";
+  const logPath = `02_Configs/Log/${KANSOU_DATE}.md`;
+  const files = new Map<string, string>([[notePath, input.content]]);
+  if (input.dailyLog !== undefined) files.set(logPath, input.dailyLog);
+  const notices: string[] = [];
+  const prompts: { header: string; value: string | undefined }[] = [];
+  const answers = [input.memo, input.next ?? null];
+  let reloads = 0;
+
+  class FakeTFile {
+    basename: string;
+    constructor(public path: string) {
+      this.basename = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+    }
+  }
+  class FakeNotice {
+    constructor(message: string) {
+      notices.push(message);
+    }
+  }
+  class FakeMarkdownView {}
+  class AbortError extends Error {}
+
+  // 2026-11-19 07:05 で止めた moment（スクリプトが使う format・add・subtract だけ）。
+  const fakeMoment = (offsetDays = 0) => ({
+    format: (pattern: string) => {
+      if (pattern === "HH:mm") return KANSOU_TIME;
+      return shiftDateKey(KANSOU_DATE, offsetDays);
+    },
+    add: (days: number) => fakeMoment(offsetDays + days),
+    subtract: (days: number) => fakeMoment(offsetDays - days),
+  });
+
+  const app = {
+    isMobile: input.isMobile === true,
+    workspace: {
+      getActiveFile: () => new FakeTFile(notePath),
+      getActiveViewOfType: () => null,
+      getLeavesOfType: (type: string) =>
+        type === "taskchute-view"
+          ? [{ view: { reloadTasksAndRestore: () => { reloads += 1; return Promise.resolve(); } } }]
+          : [],
+    },
+    vault: {
+      read: (file: FakeTFile) => Promise.resolve(files.get(file.path) ?? ""),
+      process: (file: FakeTFile, fn: (data: string) => string) => {
+        const next = fn(files.get(file.path) ?? "");
+        files.set(file.path, next);
+        return Promise.resolve(next);
+      },
+      modify: (file: FakeTFile, data: string) => {
+        files.set(file.path, data);
+        return Promise.resolve();
+      },
+      create: (path: string, data: string) => {
+        files.set(path, data);
+        return Promise.resolve(new FakeTFile(path));
+      },
+      getAbstractFileByPath: (path: string) => (files.has(path) ? new FakeTFile(path) : null),
+    },
+    fileManager: {
+      generateMarkdownLink: (file: FakeTFile) => `[[${file.basename}]]`,
+    },
+  };
+  const params = {
+    app,
+    obsidian: { Notice: FakeNotice, MarkdownView: FakeMarkdownView, TFile: FakeTFile },
+    quickAddApi: {
+      inputPrompt: (header: string, _placeholder?: string, value?: string) => {
+        prompts.push({ header, value });
+        return Promise.resolve(answers.shift() ?? null);
+      },
+    },
+    abort: (message: string) => {
+      throw new AbortError(message);
+    },
+  };
+  const sandbox: { module: { exports: unknown }; window: { moment: typeof fakeMoment } } = {
+    module: { exports: undefined },
+    window: { moment: () => fakeMoment(0) },
+  };
+  runInNewContext(source, sandbox);
+  const script = sandbox.module.exports as (params: unknown) => Promise<void>;
+  return script(params)
+    .catch((error: unknown) => {
+      if (!(error instanceof AbortError)) throw error;
+    })
+    .then(() => ({ note: files.get(notePath) ?? "", dailyLog: files.get(logPath), notices, prompts, reloads }));
+}
+
+/** 同じ入力で、PJ-span（「メモと次回」の画面）が書く結果。main.ts の runHabitMemo と同じ順に関数を使う。 */
+function runPjSpanMemo(input: KansouCase): KansouRun {
+  const t = createTranslator("ja");
+  const path = input.path ?? "pj-span/腕立て.md";
+  const basename = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+  const result: KansouRun = { note: input.content, dailyLog: input.dailyLog, notices: [], prompts: [], reloads: 0 };
+  if (isInDailyLogFolder(path, DEFAULT_DAILY_LOG_FOLDER)) return result;
+  // 画面には「メモ」と、次の一手を入れた「次回」の 2 つの欄を出す。
+  result.prompts.push({ header: "メモ", value: undefined }, { header: "次回", value: currentNextAction(input.content) });
+  if (input.memo === null || input.next === null || input.next === undefined) return result;
+  const prepared = prepareHabitMemoInput(input.memo, input.next);
+  if (!prepared) {
+    result.notices.push(t("notice.habitMemoEmpty"));
+    return result;
+  }
+  result.note = applyHabitMemo(input.content, { ...prepared, basename, date: KANSOU_DATE });
+  if (prepared.memo) {
+    const entry = buildDailyLogEntry(KANSOU_TIME, `[[${basename}]]`, prepared.memo);
+    result.dailyLog =
+      input.dailyLog === undefined ? buildNewDailyLog(KANSOU_DATE, entry) : appendDailyLogEntry(input.dailyLog, entry);
+  }
+  result.reloads = 1;
+  result.notices.push(t(habitMemoNotice(prepared.memo !== "", input.isMobile === true).key));
+  return result;
+}
+
+const KANSOU_NOTES: Record<string, string> = {
+  typical: [
+    "---",
+    'title: "腕立て｜15回3セット"',
+    "taskId: tc-task-1",
+    "tags:",
+    "  - task",
+    "---",
+    "## いまやること",
+    "",
+    "- 腕立て伏せ",
+    "",
+    "## 次の一手",
+    "",
+    "- [x] 10回3セット",
+    "- [ ] 15回3セット",
+    "- [ ] 20回3セット",
+    "",
+    "## ログ",
+    "",
+    "- 2026-11-18 きつかった",
+    "--- ",
+    "",
+  ].join("\n"),
+  noTitle: "---\ntaskId: tc-task-2\n---\n## 次の一手\n\n- [ ] 45から\n\n## ログ\n",
+  noFrontmatter: "## 次の一手\n\n- [ ] 45から\n\n## ログ\n\n- 2026-11-01 はじめた\n--- \n",
+  marked: '---\ntitle: "★将棋｜詰将棋5問"\n---\n## いまやること\n詰将棋\n\n## 次の一手\n- [ ] 詰将棋5問\n## ログ\n',
+  markedNoLabel: "---\ntitle: ◆読書｜10ページ\n---\n## 次の一手\n\n- [ ] 10ページ\n",
+  allChecked: '---\ntitle: "散歩｜1km"\n---\n## いまやること\n\n- 夜の散歩\n\n## 次の一手\n\n- [x] 1km\n- [X] 2km\n\n## ログ\n',
+  noNextHeading: '---\ntitle: "瞑想"\n---\n## いまやること\n\n5分\n## ログ\n\n- 2026-11-10 集中できた\n--- \n',
+  noHeadings: "なにもない本文",
+  empty: "",
+  nextLast: "---\ntitle: 'ストレッチ'\n---\n## ログ\n\n## 次の一手\n\n\n- [ ] 前屈\n\n\n- 開脚\n* [ ] 肩\n",
+  quotedTitle: '---\ntitle: "引用\\"テスト\\\\｜a"\n---\n## いまやること\n\n- 「言葉」\\と"記号"\n## 次の一手\n- [ ] a\n',
+  emptyTitle: "---\ntitle: ''\n---\n## 次の一手\n\n- [x] 終わった\n",
+  crlf: '---\r\ntitle: "腹筋｜30回"\r\n---\r\n## 次の一手\r\n\r\n- [ ] 30回\r\n\r\n## ログ\r\n\r\n- 2026-11-18 よし\r\n--- \r\n',
+  headingSpaces: '---\ntitle: "縄跳び"\n---\n## 次の一手  \n- [ ] 100回\n## ログ\t\n- 2026-11-02 はじめた\n',
+  unclosedFrontmatter: "---\ntitle: 途中\n## 次の一手\n- [ ] x\n",
+  frontmatterNoNewline: "---\ntitle: \"a\"\n---",
+};
+
+test("the habit memo port writes the same note, daily log, and notice as the 感想メモ QuickAdd script", async () => {
+  const combos: { label: string; memo: string | null; next: string | null; dailyLog?: string; isMobile?: boolean }[] = [
+    { label: "memo + same next", memo: "よくできた", next: "@prefill" },
+    { label: "memo + new next", memo: "  フォームを意識  ", next: "20回3セット", dailyLog: "---\nStart: x\n---\n既存" },
+    { label: "memo only", memo: "メモだけ", next: "", dailyLog: "既存の行\n", isMobile: true },
+    { label: "next only", memo: "", next: "- [ ] 50から", isMobile: true },
+    { label: "next only (desktop)", memo: "   ", next: "[x] 次はこれ\n2 行目は使わない" },
+    { label: "both empty", memo: "", next: "  " },
+    { label: "cancel memo", memo: null, next: null },
+    { label: "cancel next", memo: "書いたけど", next: null },
+  ];
+  let compared = 0;
+  let written = 0;
+  for (const [name, content] of Object.entries(KANSOU_NOTES)) {
+    for (const combo of combos) {
+      const next = combo.next === "@prefill" ? currentNextAction(content) : combo.next;
+      const input: KansouCase = { content, memo: combo.memo, next, dailyLog: combo.dailyLog, isMobile: combo.isMobile };
+      const expected = await runKansouScript(input);
+      const actual = runPjSpanMemo(input);
+      const label = `${name} / ${combo.label}`;
+      assert.equal(actual.note, expected.note, `note: ${label}`);
+      assert.equal(actual.dailyLog, expected.dailyLog, `daily log: ${label}`);
+      assert.equal(actual.reloads, expected.reloads, `TaskChute reload: ${label}`);
+      assert.equal(actual.prompts[1]?.value, expected.prompts[1]?.value ?? currentNextAction(content), `prefill: ${label}`);
+      if (combo.memo !== null && combo.next !== null) {
+        assert.deepEqual(actual.notices, expected.notices, `notice: ${label}`);
+      }
+      compared += 1;
+      if (expected.note !== content) written += 1;
+    }
+  }
+  assert.equal(compared, Object.keys(KANSOU_NOTES).length * combos.length);
+  // 比べたうち、スクリプトがノートを書き換えたのは「書く」5 通り × ノートの数。
+  assert.equal(written, Object.keys(KANSOU_NOTES).length * 5);
+
+  // 日次ログのフォルダの中のノートでは、スクリプトもPJ-spanも書かない。
+  const inLog = await runKansouScript({ path: "02_Configs/Log/2026-11-19.md", content: "x", memo: "m", next: "n" });
+  assert.equal(inLog.note, "x");
+  assert.equal(inLog.prompts.length, 0);
+  assert.equal(isInDailyLogFolder("02_Configs/Log/2026-11-19.md", DEFAULT_DAILY_LOG_FOLDER), true);
+  assert.equal(isInDailyLogFolder("02_Configs/Logs/a.md", DEFAULT_DAILY_LOG_FOLDER), false);
+});
+
+test("applyHabitMemo writes the memo under ログ, replaces the first open 次の一手, and rewrites the title", () => {
+  const base = { basename: "腕立て", date: "2026-11-19" };
+  assert.equal(
+    applyHabitMemo(KANSOU_NOTES.typical ?? "", { ...base, memo: "よくできた", next: "20回3セット" }),
+    [
+      "---",
+      'title: "腕立て伏せ｜20回3セット"',
+      "taskId: tc-task-1",
+      "tags:",
+      "  - task",
+      "---",
+      "## いまやること",
+      "",
+      "- 腕立て伏せ",
+      "",
+      "## 次の一手",
+      "",
+      "- [x] 10回3セット",
+      "- [ ] 20回3セット",
+      "- [ ] 20回3セット",
+      "",
+      "## ログ",
+      "",
+      "- 2026-11-19 よくできた",
+      "--- ",
+      "- 2026-11-18 きつかった",
+      "--- ",
+      "",
+    ].join("\n")
+  );
+  // メモだけのとき、title と次の一手はそのまま。
+  assert.equal(
+    applyHabitMemo(KANSOU_NOTES.noTitle ?? "", { ...base, memo: "m", next: "" }),
+    '---\ntaskId: tc-task-2\ntitle: "腕立て"\n---\n## 次の一手\n\n- [ ] 45から\n\n## ログ\n\n- 2026-11-19 m\n--- \n'
+  );
+  // 全部チェック済みで次回が空なら、title は左側だけ（いまやることの 1 行目）。
+  assert.equal(
+    applyHabitMemo(KANSOU_NOTES.allChecked ?? "", { ...base, memo: "歩いた", next: "" }),
+    '---\ntitle: "夜の散歩"\n---\n## いまやること\n\n- 夜の散歩\n\n## 次の一手\n\n- [x] 1km\n- [X] 2km\n\n## ログ\n\n- 2026-11-19 歩いた\n--- \n'
+  );
+  // 印（★）は残し、次の一手が無ければ ## ログ の前に作る。
+  assert.equal(
+    applyHabitMemo('---\ntitle: "★瞑想"\n---\n## ログ\n', { ...base, basename: "瞑想", memo: "", next: "10分" }),
+    '---\ntitle: "★瞑想｜10分"\n---\n## 次の一手\n\n- [ ] 10分\n\n## ログ\n'
+  );
+  // 何もないノートには、frontmatter と見出しを作る。
+  assert.equal(
+    applyHabitMemo("", { ...base, memo: "初回", next: "続ける" }),
+    '---\ntitle: "腕立て｜続ける"\n---\n\n## 次の一手\n\n- [ ] 続ける\n\n## ログ\n\n- 2026-11-19 初回\n--- \n'
+  );
+});
+
+test("habit memo input, settings, daily log, and notice helpers follow the 感想メモ rules", async () => {
+  assert.equal(submittedNextText("- [ ] 50から"), "50から");
+  assert.equal(submittedNextText("[x] 済み\n2 行目"), "済み");
+  assert.equal(submittedNextText("  "), "");
+  assert.equal(submittedNextText(null), "");
+  assert.equal(normalizeHabitMemo("  よし  "), "よし");
+  assert.equal(normalizeHabitMemo("1 行目\n\n  2 行目  \r\n"), "1 行目\n  2 行目");
+  assert.equal(normalizeHabitMemo(undefined), "");
+  assert.deepEqual(prepareHabitMemoInput(" ", "\n"), null);
+  assert.deepEqual(prepareHabitMemoInput("a\nb", "- [ ] c"), { memo: "a\n  b", next: "c" });
+  assert.equal(
+    applyHabitMemo("## ログ\n", { basename: "x", date: "2026-11-19", memo: "a\n  b", next: "" }),
+    '---\ntitle: "x"\n---\n\n## ログ\n\n- 2026-11-19 a\n  b\n--- \n'
+  );
+
+  assert.equal(currentNextAction(KANSOU_NOTES.typical ?? ""), "15回3セット");
+  assert.equal(currentNextAction(KANSOU_NOTES.allChecked ?? ""), "");
+  assert.equal(currentNextAction("## 次の一手\n\n- [x] a\n\n- b\n"), "b");
+  assert.equal(currentLabel("## いまやること\n\n--- 区切り\n## 次"), "区切り");
+  assert.equal(currentLabel("## いまやること\n\n## 次"), "");
+  assert.equal(allNextChecked("## 次の一手\n"), false);
+  assert.equal(replaceFirstOpenNext("## 次の一手\n- [x] a\n", " "), "## 次の一手\n- [x] a\n");
+  assert.equal(insertAfterLogHeading("本文", "- 行"), "本文\n\n## ログ\n\n- 行\n");
+  assert.equal(insertAfterLogHeading("## ログ\r\n\r\n- 古い", "- 新"), "## ログ\n\n- 新\n- 古い");
+  assert.equal(upsertTitle('---\ntitle: "a｜b"\n---\n', "f", "", "", false), '---\ntitle: "a｜b"\n---\n');
+
+  assert.equal(dailyLogPath("02_Configs/Log", "2026-11-19"), "02_Configs/Log/2026-11-19.md");
+  assert.equal(dailyLogPath(" /日記/ログ/ ", "2026-01-01"), "日記/ログ/2026-01-01.md");
+  assert.equal(normalizeDailyLogFolder(""), DEFAULT_DAILY_LOG_FOLDER);
+  assert.equal(normalizeDailyLogFolder(3), DEFAULT_DAILY_LOG_FOLDER);
+  assert.equal(normalizeDailyLogFolder("a\\b/"), "a/b");
+  assert.equal(
+    buildNewDailyLog("2026-03-01", buildDailyLogEntry("23:59", "[[腕立て]]", "m")),
+    "---\nStart: 2026-03-01\nEnd: 2026-03-02\n---\n[[2026-02-28]] ｜ [[2026-03-02]]\n\n\n- 23:59 [[腕立て]] m\n--- \n"
+  );
+  assert.equal(appendDailyLogEntry("a", "- b\n"), "a\n- b\n");
+  assert.equal(appendDailyLogEntry("a\n", "- b\n"), "a\n- b\n");
+  assert.equal(formatMemoTime(new Date(2026, 10, 19, 7, 5)), "07:05");
+
+  assert.equal(normalizeHabitMemoEnabled(undefined), true);
+  assert.equal(normalizeHabitMemoEnabled(false), false);
+  assert.equal(normalizeHabitMemoEnabled("false"), true);
+  assert.equal(chooseHabitAfterLog({ quickAddChoice: "感想メモ", memoEnabled: true }), "quickadd");
+  assert.equal(chooseHabitAfterLog({ quickAddChoice: "感想メモ", memoEnabled: false }), "quickadd");
+  assert.equal(chooseHabitAfterLog({ quickAddChoice: " ", memoEnabled: true }), "memo");
+  assert.equal(chooseHabitAfterLog({ quickAddChoice: "", memoEnabled: false }), "none");
+
+  assert.deepEqual(habitMemoNotice(true, true), { key: "notice.habitMemoMobile", duration: 8000 });
+  assert.deepEqual(habitMemoNotice(true, false), { key: "notice.habitMemoSaved" });
+  assert.deepEqual(habitMemoNotice(false, true), { key: "notice.habitNextMobile", duration: 8000 });
+  assert.deepEqual(habitMemoNotice(false, false), { key: "notice.habitNextSaved" });
+
+  const calls: unknown[] = [];
+  await reloadTaskChuteViewIfOpen({ getLeavesOfType: () => [] });
+  await reloadTaskChuteViewIfOpen({ getLeavesOfType: () => [{ view: {} }] });
+  await reloadTaskChuteViewIfOpen({
+    getLeavesOfType: (type) =>
+      type === "taskchute-view" ? [{ view: { reloadTasksAndRestore: (options: unknown) => calls.push(options) } }] : [],
+  });
+  assert.deepEqual(calls, [{ runBoundaryCheck: true }]);
+
+  const t = createTranslator("ja");
+  assert.equal(t("setting.habitMemo"), "「今日やった」のあとにメモと次回を書く");
+  assert.equal(t("habitMemo.title", { title: "腕立て" }), "『腕立て』のメモと次回");
+  assert.equal(t("notice.habitMemoMobile"), "日次ログに書きました。Synctrainで同期してください");
+  const en = createTranslator("en");
+  assert.equal(en("habitMemo.save"), "Save");
+  assert.equal(en("setting.habitDailyLogFolder"), "Daily log folder");
 });

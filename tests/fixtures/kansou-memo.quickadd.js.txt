@@ -1,0 +1,370 @@
+module.exports = async (params) => {
+  const { app, quickAddApi, obsidian } = params;
+  const Notice = obsidian.Notice;
+  const MarkdownView = obsidian.MarkdownView;
+  const TFile = obsidian.TFile;
+
+  const stop = (message) => {
+    new Notice(message);
+    if (typeof params.abort === "function") return params.abort(message);
+    throw new Error(message);
+  };
+
+  const file = app.workspace.getActiveFile();
+  if (!file || !(file instanceof TFile)) {
+    return stop("開いているノートがありません");
+  }
+  if (file.path.startsWith("02_Configs/Log/")) {
+    return stop("日次ログではなく、積み上げたいタスクノートを開いて実行してください");
+  }
+
+  const memoRaw = await quickAddApi.inputPrompt("メモ");
+  if (memoRaw == null) {
+    return stop("キャンセルしました");
+  }
+  const memo = String(memoRaw).trim();
+
+  let current = getEditorOrFileText(app, MarkdownView, file);
+  if (current == null) {
+    current = await app.vault.read(file);
+  }
+
+  const nextRaw = await quickAddApi.inputPrompt(
+    "次回",
+    "",
+    currentNextAction(current)
+  );
+  if (nextRaw == null) {
+    return stop("キャンセルしました");
+  }
+  const next = submittedNextText(nextRaw);
+  if (!memo && !next) {
+    return stop("メモも次回も空なので中止しました");
+  }
+
+  const moment = window.moment;
+  const date = moment().format("YYYY-MM-DD");
+  const withNext = next ? replaceFirstOpenNext(current, next) : current;
+  const checkedDone = !next && allNextChecked(withNext);
+  const titleAction = next ? firstOpenNext(sectionNextItems(withNext)) : "";
+  const left = next || checkedDone ? currentLabel(withNext) : "";
+  let content = upsertTitle(withNext, file.basename, titleAction, left, checkedDone);
+  if (memo) {
+    content = insertAfterLogHeading(content, `- ${date} ${memo}\n--- `);
+  }
+  await setEditorOrFileText(app, MarkdownView, file, content);
+
+  if (memo) {
+    await appendDailyLog(app, TFile, file, memo, moment);
+  }
+  await reloadTaskChuteIfOpen(app);
+  if (memo && app.isMobile) {
+    new Notice("日次ログに書きました。Synctrainで同期してください", 8000);
+  } else if (memo) {
+    new Notice("ノートと日次ログに書きました");
+  } else if (app.isMobile) {
+    new Notice("次の一手を書き換えました。Synctrainで同期してください", 8000);
+  } else {
+    new Notice("次の一手を書き換えました");
+  }
+};
+
+function getEditorOrFileText(app, MarkdownView, file) {
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  if (view && view.file && view.file.path === file.path) {
+    return view.editor.getValue();
+  }
+  return null;
+}
+
+async function setEditorOrFileText(app, MarkdownView, file, next) {
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  if (view && view.file && view.file.path === file.path) {
+    view.editor.setValue(next);
+    return;
+  }
+  if (typeof app.vault.process === "function") {
+    await app.vault.process(file, () => next);
+    return;
+  }
+  await app.vault.modify(file, next);
+}
+
+function yamlQuote(value) {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function titleMark(existingTitle) {
+  const existing = String(existingTitle || "").trim();
+  if (existing.startsWith("★")) return "★";
+  if (existing.startsWith("◆")) return "◆";
+  if (existing.startsWith("◎")) return "◎";
+  return "";
+}
+
+function currentLabel(source) {
+  const text = source == null ? "" : source;
+  const headingRe = /^## いまやること[ \t]*$/m;
+  const m = headingRe.exec(text);
+  if (!m) return "";
+  const headingEnd = m.index + m[0].length;
+  const after = text.slice(headingEnd);
+  const nextH = /^## /m.exec(after);
+  const section = nextH ? after.slice(0, nextH.index) : after;
+  const lines = section.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = String(raw).trim();
+    if (!line) continue;
+    return line.replace(/^-+\s*/, "").trim();
+  }
+  return "";
+}
+
+function parseNextLine(raw) {
+  const line = String(raw).trim();
+  if (!line) return null;
+  const match = /^(?:[-*+][ \t]*)?(?:\[([ xX])\][ \t]*)?([\s\S]*)$/.exec(line);
+  if (!match) return null;
+  const text = String(match[2] || "").trim();
+  if (!text) return null;
+  const mark = match[1];
+  return { kind: "item", checked: mark === "x" || mark === "X", text };
+}
+
+function parseNextLines(raw) {
+  const lines = String(raw == null ? "" : raw).split(/\r?\n/);
+  const items = [];
+  let started = false;
+  for (const rawLine of lines) {
+    const parsed = parseNextLine(rawLine);
+    if (!parsed) {
+      if (!started) continue;
+      if (items.length && items[items.length - 1].kind !== "blank") {
+        items.push({ kind: "blank" });
+      }
+      continue;
+    }
+    started = true;
+    items.push(parsed);
+  }
+  while (items.length && items[items.length - 1].kind === "blank") items.pop();
+  return items;
+}
+
+function submittedNextText(raw) {
+  const first = String(raw == null ? "" : raw).split(/\r?\n/)[0];
+  const parsed = parseNextLine(first);
+  return parsed ? parsed.text : "";
+}
+
+function sectionNextItems(source) {
+  const text = source == null ? "" : source;
+  const headingRe = /^## 次の一手[ \t]*$/m;
+  const m = headingRe.exec(text);
+  if (!m) return [];
+  const headingEnd = m.index + m[0].length;
+  const after = text.slice(headingEnd);
+  const nextH = /^## /m.exec(after);
+  const section = nextH ? after.slice(0, nextH.index) : after;
+  return parseNextLines(section);
+}
+
+function formatNextSection(items) {
+  return items
+    .map((item) => {
+      if (item.kind === "blank") return "";
+      return item.checked ? `- [x] ${item.text}` : `- [ ] ${item.text}`;
+    })
+    .join("\n");
+}
+
+function allNextChecked(source) {
+  const items = sectionNextItems(source).filter((item) => item.kind === "item");
+  return items.length > 0 && items.every((item) => item.checked);
+}
+
+function firstOpenNext(items) {
+  for (const item of items) {
+    if (item.kind === "item" && !item.checked) return item.text;
+  }
+  return "";
+}
+
+function currentNextAction(source) {
+  return firstOpenNext(sectionNextItems(source));
+}
+
+function replaceFirstOpenNext(content, text) {
+  const wording = String(text || "").trim();
+  if (!wording) return content == null ? "" : content;
+  const source = content == null ? "" : content;
+  const items = sectionNextItems(source);
+  let replaced = false;
+  for (const item of items) {
+    if (item.kind === "item" && !item.checked) {
+      item.text = wording;
+      replaced = true;
+      break;
+    }
+  }
+  if (!replaced) items.push({ kind: "item", checked: false, text: wording });
+  return writeNextSection(source, items);
+}
+
+function titleText(basename, next, existingTitle, leftOverride) {
+  const left = String(leftOverride || "").trim() || String(basename);
+  const mark = titleMark(existingTitle);
+  const name = mark && !left.startsWith(mark) ? `${mark}${left}` : left;
+  if (!next) return name;
+  const action = String(next).replace(/\r?\n/g, " ").trim();
+  return `${name}｜${action}`;
+}
+
+function frontmatterBounds(source) {
+  if (!source.startsWith("---")) return null;
+  const nl = source.indexOf("\n");
+  if (nl === -1) return null;
+  if (source.slice(0, nl).replace(/\r$/, "") !== "---") return null;
+  const rest = source.slice(nl + 1);
+  const close = rest.search(/^---[ \t]*\r?$/m);
+  if (close === -1) return null;
+  const bodyStart = nl + 1;
+  const bodyEnd = bodyStart + close;
+  return { bodyStart, bodyEnd };
+}
+
+function titleLineInfo(source) {
+  const bounds = frontmatterBounds(source);
+  if (!bounds) return { bounds: null, hasValue: false, value: "" };
+  const body = source.slice(bounds.bodyStart, bounds.bodyEnd);
+  const match = /^title:[ \t]*([^\r\n]*)$/m.exec(body);
+  if (!match) return { bounds, hasValue: false, value: "" };
+  const raw = match[1].trim();
+  let value = raw;
+  if (
+    (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) ||
+    (raw.startsWith("'") && raw.endsWith("'") && raw.length >= 2)
+  ) {
+    value = raw.slice(1, -1);
+  }
+  return {
+    bounds,
+    hasValue: value.trim() !== "",
+    value,
+    lineStart: bounds.bodyStart + match.index,
+    lineEnd: bounds.bodyStart + match.index + match[0].length,
+  };
+}
+
+function upsertTitle(content, basename, next, leftOverride, forceLeftOnly) {
+  const source = content == null ? "" : content;
+  const info = titleLineInfo(source);
+  if (!next && info.hasValue && !forceLeftOnly) return source;
+  const line = `title: ${yamlQuote(titleText(basename, next, info.value, leftOverride))}`;
+  if (!info.bounds) {
+    const body = source.length === 0 || source.startsWith("\n") ? source : `\n${source}`;
+    return `---\n${line}\n---\n${body}`;
+  }
+  if (info.lineStart != null) {
+    return source.slice(0, info.lineStart) + line + source.slice(info.lineEnd);
+  }
+  const before = source.slice(0, info.bounds.bodyEnd);
+  const pad = before.endsWith("\n") ? "" : "\n";
+  return before + pad + line + "\n" + source.slice(info.bounds.bodyEnd);
+}
+
+function writeNextSection(content, items) {
+  if (!items.some((item) => item.kind === "item")) {
+    return content == null ? "" : content;
+  }
+  const source = content == null ? "" : content;
+  const line = formatNextSection(items);
+  const headingRe = /^## 次の一手[ \t]*$/m;
+  const m = headingRe.exec(source);
+  if (m) {
+    const headingEnd = m.index + m[0].length;
+    const after = source.slice(headingEnd);
+    const nextH = /^## /m.exec(after);
+    const sectionEnd = nextH ? headingEnd + nextH.index : source.length;
+    const before = source.slice(0, headingEnd);
+    const afterSection = source.slice(sectionEnd);
+    if (!afterSection) {
+      return before + "\n\n" + line + "\n";
+    }
+    return before + "\n\n" + line + "\n\n" + afterSection;
+  }
+
+  const block = `## 次の一手\n\n${line}\n`;
+  const logRe = /^## ログ[ \t]*$/m;
+  const logM = logRe.exec(source);
+  if (logM) {
+    let prefix = source.slice(0, logM.index);
+    if (prefix.length > 0 && !prefix.endsWith("\n")) {
+      prefix += "\n";
+    }
+    return prefix + `## 次の一手\n\n${line}\n\n` + source.slice(logM.index);
+  }
+
+  if (source.length === 0) {
+    return block;
+  }
+  const pad = source.endsWith("\n") ? "" : "\n";
+  return `${source}${pad}\n${block}`;
+}
+
+function insertAfterLogHeading(content, line) {
+  const source = content == null ? "" : content;
+  const re = /^## ログ[ \t]*$/m;
+  const m = re.exec(source);
+  if (!m) {
+    const pad = source.endsWith("\n") || source.length === 0 ? "" : "\n";
+    return `${source}${pad}\n## ログ\n\n${line}\n`;
+  }
+  const headingEnd = m.index + m[0].length;
+  let j = headingEnd;
+  while (j < source.length && (source[j] === "\n" || source[j] === "\r")) j++;
+  return source.slice(0, headingEnd) + "\n\n" + line + "\n" + source.slice(j);
+}
+
+async function appendDailyLog(app, TFile, sourceFile, memo, moment) {
+  const date = moment().format("YYYY-MM-DD");
+  const time = moment().format("HH:mm");
+  const nextDate = moment().add(1, "days").format("YYYY-MM-DD");
+  const prevDate = moment().subtract(1, "days").format("YYYY-MM-DD");
+  const path = `02_Configs/Log/${date}.md`;
+  const generate = app.fileManager && app.fileManager.generateMarkdownLink;
+  const link =
+    typeof generate === "function"
+      ? generate.call(app.fileManager, sourceFile, path)
+      : `[[${sourceFile.basename}]]`;
+  const entry = `- ${time} ${link} ${memo}\n--- \n`;
+
+  let file = app.vault.getAbstractFileByPath(path);
+  if (!file) {
+    const body =
+      `---\nStart: ${date}\nEnd: ${nextDate}\n---\n` +
+      `[[${prevDate}]] ｜ [[${nextDate}]]\n\n\n${entry}`;
+    await app.vault.create(path, body);
+    return;
+  }
+  if (!(file instanceof TFile)) return;
+
+  const transform = (data) => {
+    const base = data.endsWith("\n") ? data : data + "\n";
+    return base + entry;
+  };
+  if (typeof app.vault.process === "function") {
+    await app.vault.process(file, transform);
+    return;
+  }
+  const data = await app.vault.read(file);
+  await app.vault.modify(file, transform(data));
+}
+
+async function reloadTaskChuteIfOpen(app) {
+  const leaf = app.workspace.getLeavesOfType("taskchute-view")[0];
+  const view = leaf && leaf.view;
+  if (view && typeof view.reloadTasksAndRestore === "function") {
+    await view.reloadTasksAndRestore({ runBoundaryCheck: true });
+  }
+}

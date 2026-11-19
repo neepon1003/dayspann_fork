@@ -1218,3 +1218,27 @@
   color: var(--color-green, #22c55e);
   cursor: default;
 }
+
+/* 「今日やった」のあとの「メモと次回」の画面。スマホでも打ちやすいよう、欄は横いっぱいにする。 */
+.dayspann-habit-memo-textarea,
+.dayspann-habit-memo-input {
+  width: 100%;
+  margin-top: 4px;
+  font-size: var(--font-ui-medium);
+}
+
+.dayspann-habit-memo-textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.dayspann-habit-memo-modal .modal-button-container {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .dayspann-habit-memo-modal .modal-button-container button {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+}
