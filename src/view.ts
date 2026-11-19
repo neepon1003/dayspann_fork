@@ -677,7 +677,7 @@ export class DayspannView extends ItemView {
       : streakWeeks(counts, todayKey, weekStreakTarget(record.habitTarget));
     const unit = record.streakUnit;
     const totalLabel = this.plugin.t("heatmap.totalLabel");
-    const totalValue = formatCountUnit(locale, totalDays, "times");
+    const totalValue = formatCountUnit(locale, totalDays, "day");
     const streakLabel = this.plugin.t("heatmap.streakLabel");
     const streakValue = formatCountUnit(locale, streak.current, unit);
     const bestLabel = this.plugin.t("heatmap.bestLabel");

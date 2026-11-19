@@ -488,16 +488,8 @@ export function durationUnit(
   return value === 1 ? "year" : "years";
 }
 
-/** 回数と単位を、画面に出す形にする。日本語は「8日」「5週」「120回」、英語は「8 days」「5 weeks」「120 times」。 */
-export function formatCountUnit(
-  locale: DayspannLocale,
-  value: number,
-  unit: "day" | "week" | "times"
-): string {
-  if (unit === "times") {
-    if (locale === "ja") return `${value}回`;
-    return value === 1 ? `${value} time` : `${value} times`;
-  }
+/** 回数と単位を、画面に出す形にする。日本語は「8日」「5週」、英語は「8 days」「5 weeks」。 */
+export function formatCountUnit(locale: DayspannLocale, value: number, unit: "day" | "week"): string {
   const label = durationUnit(locale, unit, value);
   return locale === "ja" ? `${value}${label}` : `${value} ${label}`;
 }

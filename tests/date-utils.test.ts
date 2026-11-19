@@ -1206,9 +1206,8 @@ test("習慣の数字は単位つきで出し、見出しの言葉を日英で�
   assert.equal(formatCountUnit("en", 8, "day"), "8 days");
   assert.equal(formatCountUnit("en", 1, "week"), "1 week");
   assert.equal(formatCountUnit("en", 5, "week"), "5 weeks");
-  assert.equal(formatCountUnit("ja", 120, "times"), "120回");
-  assert.equal(formatCountUnit("en", 1, "times"), "1 time");
-  assert.equal(formatCountUnit("en", 120, "times"), "120 times");
+  assert.equal(formatCountUnit("ja", 120, "day"), "120日");
+  assert.equal(formatCountUnit("en", 120, "day"), "120 days");
 
   const t = createTranslator("ja");
   assert.equal(t("heatmap.recentLabel", { days: 30 }), "直近30日");
