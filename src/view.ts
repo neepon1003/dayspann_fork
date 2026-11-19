@@ -30,6 +30,7 @@ import {
   sundayOfDateKey,
   sundayWeekNumber,
 } from "./habit-log";
+import { findPjSpanEntries } from "./habit-record";
 import {
   habitTargetProgress,
   HabitTargetProgress,
@@ -437,7 +438,7 @@ export class DayspannView extends ItemView {
     card.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       const menu = new Menu();
-      this.addHabitMenuItems(menu, record);
+      this.addHabitMenuItems(menu, record, undoable);
       menu.showAtMouseEvent(event);
     });
 
@@ -446,14 +447,12 @@ export class DayspannView extends ItemView {
     const head = content.createDiv("dayspann-habit-head");
     const headText = head.createDiv("dayspann-habit-head-text");
     const todayKey = this.plugin.todayKey();
-    const counts = logs && record.taskchute && !record.archived
-      ? countHabitDays(logs, {
-          taskId: record.taskchute.taskId,
-          path: record.file.path,
-          basename: record.file.basename,
-        })
-      : null;
+    const habit = { taskId: record.taskchute?.taskId, path: record.file.path, basename: record.file.basename };
+    const counts = logs && record.taskchute && !record.archived ? countHabitDays(logs, habit) : null;
     const progress = counts ? this.habitProgressCopy(habitTargetProgress(record.habitTarget, counts, todayKey)) : null;
+    // 今日の記録があるか（「今日やった」ボタン）と、そのうち PJ-span で記録した分があるか（「今日の記録を取り消す」）。
+    const doneToday = counts ? (counts[todayKey] ?? 0) > 0 : false;
+    const undoable = logs && counts ? findPjSpanEntries(logs, habit, todayKey).length > 0 : false;
 
     headText.createEl("h3", { text: title });
     const updated = formatCompletedCardDate(
@@ -491,13 +490,46 @@ export class DayspannView extends ItemView {
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = new Menu();
-      this.addHabitMenuItems(menu, record);
+      this.addHabitMenuItems(menu, record, undoable);
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
 
-    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
-    if (counts) this.renderHeatmap(content, record, counts, todayKey);
+    // 続けている TaskChute のタスクなら、実行ログからヒートマップを出し、右下に「今日やった」ボタンを置く。
+    if (counts) {
+      this.renderHeatmap(content, record, counts, todayKey);
+      this.renderHabitLogButton(content, record, doneToday);
+    }
+  }
+
+  /**
+   * カードの右下の「✓ 今日やった」ボタン。押すと TaskChute の実行ログに今日の分を 1 件書く。
+   * 今日の記録がもうあれば、緑の「今日 ✓」にして、押しても何もしない（取り消しは「…」メニューから）。
+   */
+  private renderHabitLogButton(parent: HTMLElement, record: DayspannRecord, doneToday: boolean): void {
+    const footer = parent.createDiv("dayspann-habit-footer");
+    const tooltip = this.plugin.t(doneToday ? "habit.loggedTodayTooltip" : "habit.logTodayTooltip");
+    const button = footer.createEl("button", {
+      cls: doneToday ? "dayspann-habit-log-button is-done" : "dayspann-habit-log-button",
+      attr: { type: "button", "aria-label": tooltip, "aria-disabled": String(doneToday) },
+    });
+    if (!doneToday) setIcon(button.createSpan("dayspann-habit-log-icon"), "check");
+    button.createSpan({ text: this.plugin.t(doneToday ? "habit.doneToday" : "habit.logToday") });
+    setTooltip(button, tooltip);
+    // カードの Enter（ノートを開く）に伝わらないようにする。
+    button.addEventListener("keydown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (doneToday || button.hasClass("is-busy")) return;
+      // 書き終わるまでは押せないようにして、続けて押しても 2 回書かないようにする。
+      button.addClass("is-busy");
+      button.setAttribute("aria-disabled", "true");
+      void this.plugin.recordHabitToday(record).finally(() => {
+        button.removeClass("is-busy");
+        button.setAttribute("aria-disabled", "false");
+      });
+    });
   }
 
   /**
@@ -645,8 +677,11 @@ export class DayspannView extends ItemView {
     if (emphasize) valueEl.addClass("is-active");
   }
 
-  /** 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・アーカイブ・削除だけ。 */
-  private addHabitMenuItems(menu: Menu, record: DayspannRecord): void {
+  /**
+   * 習慣のカードの「…」と右クリックのメニュー。延期はなく、編集・ノートを開く・元のノート・今日の記録を取り消す・アーカイブ・削除だけ。
+   * 「今日の記録を取り消す」は、PJ-span で記録した今日の分があるとき（undoable）だけ押せる。
+   */
+  private addHabitMenuItems(menu: Menu, record: DayspannRecord, undoable = false): void {
     menu.addItem((menuItem) =>
       menuItem.setTitle(this.plugin.t("action.edit")).setIcon("pencil").onClick(() => this.plugin.openEditEntry(record))
     );
@@ -656,6 +691,15 @@ export class DayspannView extends ItemView {
     if (record.sourcePath) {
       menu.addItem((menuItem) =>
         menuItem.setTitle(this.plugin.t("action.openSource")).setIcon("external-link").onClick(() => void this.plugin.openRecordSource(record))
+      );
+    }
+    if (record.taskchute && !record.archived) {
+      menu.addItem((menuItem) =>
+        menuItem
+          .setTitle(this.plugin.t("action.undoHabitToday"))
+          .setIcon("undo-2")
+          .setDisabled(!undoable)
+          .onClick(() => void this.plugin.undoHabitToday(record))
       );
     }
     menu.addSeparator();

@@ -65,6 +65,19 @@ import {
   sundayWeekNumber,
 } from "../src/habit-log";
 import {
+  buildHabitDoneDelta,
+  buildHabitUndoDelta,
+  deltaLineToAppend,
+  findPjSpanEntries,
+  formatClockTime,
+  isHabitDoneOn,
+  isPjSpanInstanceId,
+  normalizeTaskChuteDeviceId,
+  resolveTaskChuteTitle,
+  TASKCHUTE_DEVICE_ID_STORAGE_KEY,
+  taskChuteDeltaPath,
+} from "../src/habit-record";
+import {
   habitTargetProgress,
   isHabitScheduled,
   plannedDateKeysInWeek,
@@ -1600,4 +1613,138 @@ test("filterHabitsScheduledToday keeps only habits scheduled for today, includin
   assert.equal(en("view.habitFilterToday"), "Today");
   assert.equal(en("view.habitFilterAll"), "All");
   assert.equal(en("view.habitFilterEmpty"), "No habits are scheduled for today");
+});
+
+test("buildHabitDoneDelta writes one TaskChute-style upsert line for today", () => {
+  const now = new Date(2026, 10, 19, 7, 5, 9); // 2026-11-19 07:05:09（その端末の時刻）
+  const fixed = (length: number) => "abcdefghijk".slice(0, length);
+  const delta = buildHabitDoneDelta({
+    title: "腕立て",
+    path: "pj-span/腕立て.md",
+    taskId: "tc-task-1",
+    deviceId: "tc-dev-1",
+    now,
+    random: fixed,
+  });
+  assert.deepEqual(Object.keys(delta), [
+    "schemaVersion",
+    "op",
+    "entryId",
+    "deviceId",
+    "monthKey",
+    "dateKey",
+    "recordedAt",
+    "payload",
+  ]);
+  assert.equal(delta.schemaVersion, 1);
+  assert.equal(delta.op, "upsert");
+  assert.equal(delta.entryId, `tc-dev-1:${now.getTime().toString(36)}:abcdefgh`);
+  assert.equal(delta.monthKey, "2026-11");
+  assert.equal(delta.dateKey, "2026-11-19");
+  assert.equal(delta.recordedAt, now.toISOString());
+  assert.deepEqual(delta.payload, {
+    taskTitle: "腕立て",
+    taskPath: "pj-span/腕立て.md",
+    taskId: "tc-task-1",
+    instanceId: `pj-span/腕立て.md_2026-11-19_${now.getTime()}_pjspan-abcdefghi`,
+    startTime: "07:05:09",
+    stopTime: "07:05:09",
+    durationSec: 0,
+    deviceId: "tc-dev-1",
+  });
+  assert.equal(formatClockTime(now), "07:05:09");
+  assert.equal(TASKCHUTE_DEVICE_ID_STORAGE_KEY, "taskchute-plus.device-id");
+  assert.equal(taskChuteDeltaPath("TaskChute/Log", "tc-dev-1", "2026-11"), "TaskChute/Log/inbox/tc-dev-1/2026-11.jsonl");
+
+  // taskId のない習慣は taskId を書かない。
+  const noId = buildHabitDoneDelta({ title: "散歩", path: "pj-span/散歩.md", deviceId: "tc-dev-1", now, random: fixed });
+  assert.equal("taskId" in noId.payload, false);
+
+  // 1 行の JSON と改行。前の行が改行で終わっていなければ、先に改行を入れる。
+  const line = deltaLineToAppend("", delta);
+  assert.equal(line, `${JSON.stringify(delta)}\n`);
+  assert.equal(deltaLineToAppend('{"op":"upsert"}\n', delta), line);
+  assert.equal(deltaLineToAppend('{"op":"upsert"}', delta), `\n${line}`);
+
+  // PJ-span の読み方でも、TaskChute の差分として読めて、今日やったことになる。
+  const habit = { taskId: "tc-task-1", path: "pj-span/腕立て.md", basename: "腕立て" };
+  const before = mergeHabitLogs([], []);
+  assert.equal(isHabitDoneOn(before, habit, "2026-11-19"), false);
+  const after = mergeHabitLogs([], parseDeltaLines(line));
+  assert.equal(isHabitDoneOn(after, habit, "2026-11-19"), true);
+  assert.deepEqual(countHabitDays(after, habit), { "2026-11-19": 1 });
+  assert.equal(findPjSpanEntries(after, habit, "2026-11-19").length, 1);
+});
+
+test("buildHabitUndoDelta removes only the record PJ-span wrote", () => {
+  const now = new Date(2026, 10, 19, 21, 0, 0);
+  const fixed = (length: number) => "zyxwvutsrqp".slice(0, length);
+  const habit = { taskId: "tc-task-1", path: "pj-span/腕立て.md", basename: "腕立て" };
+  const days = parseMonthlyLog(
+    JSON.stringify({
+      taskExecutions: {
+        "2026-11-19": [
+          {
+            taskTitle: "腕立て",
+            taskPath: "pj-span/腕立て.md",
+            taskId: "tc-task-1",
+            instanceId: "pj-span/腕立て.md_2026-11-19_1763500000000_k2j3h4g5f",
+            startTime: "06:00:00",
+            stopTime: "06:10:00",
+          },
+        ],
+      },
+    })
+  );
+  const done = buildHabitDoneDelta({ title: "腕立て", path: habit.path, taskId: habit.taskId, deviceId: "tc-dev-1", now, random: fixed });
+  const merged = mergeHabitLogs([days], parseDeltaLines(deltaLineToAppend("", done)));
+  assert.deepEqual(countHabitDays(merged, habit), { "2026-11-19": 2 });
+
+  // TaskChute で付けた記録は PJ-span の記録とは見なさない。
+  const mine = findPjSpanEntries(merged, habit, "2026-11-19");
+  assert.equal(mine.length, 1);
+  const entry = mine[0];
+  assert.ok(entry);
+  assert.equal(entry.instanceId, done.payload.instanceId);
+  assert.equal(isPjSpanInstanceId("pj-span/腕立て.md_2026-11-19_1763500000000_k2j3h4g5f"), false);
+  assert.equal(isPjSpanInstanceId(undefined), false);
+  assert.equal(isPjSpanInstanceId(done.payload.instanceId), true);
+
+  const undo = buildHabitUndoDelta(entry, "2026-11-19", "tc-dev-1", now, fixed);
+  assert.equal(undo.op, "delete");
+  assert.equal(undo.dateKey, "2026-11-19");
+  assert.equal(undo.monthKey, "2026-11");
+  assert.deepEqual(undo.payload, {
+    instanceId: done.payload.instanceId,
+    taskId: "tc-task-1",
+    taskPath: "pj-span/腕立て.md",
+  });
+  const undone = mergeHabitLogs(
+    [days],
+    parseDeltaLines(deltaLineToAppend("", done) + deltaLineToAppend("", undo))
+  );
+  assert.deepEqual(countHabitDays(undone, habit), { "2026-11-19": 1 });
+  assert.equal(findPjSpanEntries(undone, habit, "2026-11-19").length, 0);
+  assert.throws(() => buildHabitUndoDelta({ taskId: "tc-task-1" }, "2026-11-19", "tc-dev-1", now, fixed));
+});
+
+test("normalizeTaskChuteDeviceId and resolveTaskChuteTitle follow TaskChute, and the button texts exist", () => {
+  assert.equal(normalizeTaskChuteDeviceId(" tc-dev-1 "), "tc-dev-1");
+  assert.equal(normalizeTaskChuteDeviceId("x".repeat(80)), "x".repeat(64));
+  assert.equal(normalizeTaskChuteDeviceId(""), null);
+  assert.equal(normalizeTaskChuteDeviceId(null), null);
+  assert.equal(normalizeTaskChuteDeviceId("a/b"), null);
+  assert.equal(normalizeTaskChuteDeviceId(".."), null);
+  assert.equal(resolveTaskChuteTitle(" 朝の腕立て ", "腕立て"), "朝の腕立て");
+  assert.equal(resolveTaskChuteTitle(undefined, "腕立て"), "腕立て");
+  assert.equal(resolveTaskChuteTitle("", "腕立て"), "腕立て");
+
+  const t = createTranslator("ja");
+  assert.equal(t("habit.logToday"), "今日やった");
+  assert.equal(t("habit.doneToday"), "今日 ✓");
+  assert.equal(t("action.undoHabitToday"), "今日の記録を取り消す");
+  assert.equal(t("notice.habitLogged", { title: "腕立て" }), "『腕立て』の今日の分を記録しました");
+  const en = createTranslator("en");
+  assert.equal(en("habit.logToday"), "Done today");
+  assert.equal(en("action.undoHabitToday"), "Undo today's record");
 });

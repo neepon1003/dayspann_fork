@@ -38,7 +38,11 @@ export interface TaskChuteHost {
     enabledPlugins?: Set<string>;
     plugins?: Record<
       string,
-      { pathManager?: { getTaskFolderPath?: () => unknown; getLogDataPath?: () => unknown } } | undefined
+      | {
+          pathManager?: { getTaskFolderPath?: () => unknown; getLogDataPath?: () => unknown };
+          settings?: { deviceId?: unknown };
+        }
+      | undefined
     >;
   };
   commands?: {

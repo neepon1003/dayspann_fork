@@ -50,6 +50,18 @@ import {
   parseMonthlyLog,
 } from "./src/habit-log";
 import {
+  buildHabitDoneDelta,
+  buildHabitUndoDelta,
+  deltaLineToAppend,
+  findPjSpanEntries,
+  isHabitDoneOn,
+  normalizeTaskChuteDeviceId,
+  resolveTaskChuteTitle,
+  TASKCHUTE_DEVICE_ID_STORAGE_KEY,
+  TaskChuteDeltaRecord,
+  taskChuteDeltaPath,
+} from "./src/habit-record";
+import {
   buildTaskChuteFields,
   canReloadTaskChuteView,
   chooseNewRecordFolder,
@@ -58,6 +70,7 @@ import {
   getTaskChuteLogFolder,
   isTaskChuteEnabled,
   readTargetDate,
+  TASKCHUTE_PLUGIN_ID,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
   TaskChuteNewTaskFields,
@@ -127,6 +140,8 @@ const DEFAULT_SETTINGS: DayspannSettings = {
 export default class DayspannPlugin extends Plugin {
   settings: DayspannSettings = DEFAULT_SETTINGS;
   private refreshTimer?: number;
+  /** 「今日やった」「取り消す」を書いている途中の習慣（ノートの場所）。続けて押しても 2 回書かないようにする。 */
+  private habitLogWrites = new Set<string>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -574,6 +589,137 @@ export default class DayspannPlugin extends Plugin {
       }
     }
     return mergeHabitLogs(snapshots, deltas);
+  }
+
+  /**
+   * 習慣のカードの「今日やった」。TaskChute の実行ログに、今日の分を 1 件書く。
+   * TaskChute と同じく、この端末の inbox/<端末ID>/YYYY-MM.jsonl に差分を 1 行足すだけにし、
+   * YYYY-MM-tasks.json へのまとめは TaskChute に任せる。今日の記録がもうあれば書かない。
+   */
+  async recordHabitToday(record: DayspannRecord): Promise<void> {
+    if (!record.taskchute || record.archived) return;
+    const key = record.file.path;
+    if (this.habitLogWrites.has(key)) return;
+    this.habitLogWrites.add(key);
+    try {
+      const deviceId = this.taskChuteDeviceIdOrNotice();
+      if (!deviceId) return;
+      const now = new Date();
+      const today = toDateKey(now);
+      const habit = { taskId: record.taskchute.taskId, path: record.file.path, basename: record.file.basename };
+      // 書く直前にログを読み直し、今日の記録がもうあれば（TaskChute で付けた分も含む）書かない。
+      const logs = await this.loadTaskChuteLogs([today.slice(0, 7)]);
+      if (isHabitDoneOn(logs, habit, today)) {
+        new Notice(this.t("notice.habitAlreadyLogged", { title: record.title }));
+        await this.refreshViews();
+        return;
+      }
+      const title = resolveTaskChuteTitle(
+        this.app.metadataCache.getFileCache(record.file)?.frontmatter?.title,
+        record.file.basename
+      );
+      await this.appendTaskChuteDelta(
+        buildHabitDoneDelta({ title, path: record.file.path, taskId: record.taskchute.taskId, deviceId, now })
+      );
+      new Notice(this.t("notice.habitLogged", { title: record.title }));
+      await this.refreshViews();
+      this.reloadTaskChuteViewNow();
+    } catch (error) {
+      console.error("[PJ-span] 今日の分を記録できませんでした", error);
+      new Notice(this.t("notice.habitLogFailed"));
+    } finally {
+      this.habitLogWrites.delete(key);
+    }
+  }
+
+  /** 「今日の記録を取り消す」。PJ-span が書いた今日の記録だけを、TaskChute と同じ delete の差分で消す。 */
+  async undoHabitToday(record: DayspannRecord): Promise<void> {
+    if (!record.taskchute || record.archived) return;
+    const key = record.file.path;
+    if (this.habitLogWrites.has(key)) return;
+    this.habitLogWrites.add(key);
+    try {
+      const deviceId = this.taskChuteDeviceIdOrNotice();
+      if (!deviceId) return;
+      const now = new Date();
+      const today = toDateKey(now);
+      const habit = { taskId: record.taskchute.taskId, path: record.file.path, basename: record.file.basename };
+      const logs = await this.loadTaskChuteLogs([today.slice(0, 7)]);
+      const entries = findPjSpanEntries(logs, habit, today);
+      if (!entries.length) {
+        new Notice(this.t("notice.habitUndoNothing"));
+        await this.refreshViews();
+        return;
+      }
+      for (const entry of entries) {
+        await this.appendTaskChuteDelta(buildHabitUndoDelta(entry, today, deviceId, now));
+      }
+      new Notice(this.t("notice.habitUndone", { title: record.title }));
+      await this.refreshViews();
+      this.reloadTaskChuteViewNow();
+    } catch (error) {
+      console.error("[PJ-span] 今日の記録を取り消せませんでした", error);
+      new Notice(this.t("notice.habitUndoFailed"));
+    } finally {
+      this.habitLogWrites.delete(key);
+    }
+  }
+
+  /**
+   * この端末の TaskChute の端末ID。TaskChute の DeviceIdentityService と同じく、localStorage を使える端末では
+   * localStorage だけを、使えない端末では TaskChute の設定（deviceId）を見る。
+   * TaskChute が無効、または端末ID がまだない（この端末で TaskChute を使っていない）ときは、知らせて null。
+   */
+  private taskChuteDeviceIdOrNotice(): string | null {
+    const host = this.app as unknown as TaskChuteHost;
+    if (!isTaskChuteEnabled(host)) {
+      new Notice(this.t("notice.habitLogNoTaskChute"));
+      return null;
+    }
+    let deviceId: string | null;
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      storage = null;
+    }
+    if (storage) {
+      try {
+        deviceId = normalizeTaskChuteDeviceId(storage.getItem(TASKCHUTE_DEVICE_ID_STORAGE_KEY));
+      } catch {
+        deviceId = null;
+      }
+    } else {
+      deviceId = normalizeTaskChuteDeviceId(host.plugins?.plugins?.[TASKCHUTE_PLUGIN_ID]?.settings?.deviceId);
+    }
+    if (!deviceId) new Notice(this.t("notice.habitLogNoDevice"));
+    return deviceId;
+  }
+
+  /** TaskChute のログフォルダの inbox/<端末ID>/YYYY-MM.jsonl に、差分を 1 行足す。ファイルやフォルダがなければ作る。 */
+  private async appendTaskChuteDelta(record: TaskChuteDeltaRecord): Promise<void> {
+    const adapter = this.app.vault.adapter;
+    const base = getTaskChuteLogFolder(this.app as unknown as TaskChuteHost);
+    const path = normalizePath(taskChuteDeltaPath(base, record.deviceId, record.monthKey));
+    const folder = path.slice(0, path.lastIndexOf("/"));
+    let current = "";
+    for (const part of folder.split("/")) {
+      current = current ? `${current}/${part}` : part;
+      if (!(await adapter.exists(current))) await adapter.mkdir(current);
+    }
+    if (await adapter.exists(path)) {
+      const existing = await adapter.read(path);
+      await adapter.append(path, deltaLineToAppend(existing, record));
+    } else {
+      await adapter.write(path, deltaLineToAppend("", record));
+    }
+  }
+
+  /** TaskChute の画面が開いているときだけ、「今日のタスクを表示」で読み直す（TaskChute がログをまとめ直す）。 */
+  private reloadTaskChuteViewNow(): void {
+    const host = this.app as unknown as TaskChuteHost;
+    if (!canReloadTaskChuteView(host)) return;
+    host.commands?.executeCommandById?.(TASKCHUTE_SHOW_TODAY_COMMAND);
   }
 
   async refreshViews(): Promise<void> {
