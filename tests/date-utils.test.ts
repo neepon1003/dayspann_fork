@@ -75,6 +75,7 @@ import {
   readRoutineWeekdays,
   readWeekday,
   sortHabitsByPending,
+  habitScheduledTodayStatus,
   summarizeHabitTargets,
   weekStreakTarget,
 } from "../src/habit-target";
@@ -1472,4 +1473,80 @@ test("週番号は日曜はじまりで、1 月 1 日が入っている週を第
   assert.deepEqual(sundayWeekNumber("2028-12-31"), { year: 2029, week: 1 });
   assert.equal(createTranslator("ja")("heatmap.weekNumber", { year: 2026, week: 47 }), "2026年 第47週");
   assert.equal(createTranslator("en")("heatmap.weekNumber", { year: 2026, week: 47 }), "Week 47, 2026");
+});
+
+test("habitScheduledTodayStatus counts only habits scheduled for today, and met only if done today", () => {
+  const today = "2026-11-19"; // 木曜日
+
+  const daily = readHabitSchedule({ routine_type: "daily" });
+  assert.equal(habitScheduledTodayStatus(daily, today, false), false);
+  assert.equal(habitScheduledTodayStatus(daily, today, true), true);
+
+  const weeklyThuFri = readHabitSchedule({
+    routine_type: "weekly",
+    routine_weekdays: ["thursday", "friday"],
+  });
+  assert.equal(habitScheduledTodayStatus(weeklyThuFri, today, false), false);
+  assert.equal(habitScheduledTodayStatus(weeklyThuFri, today, true), true);
+  const weeklyTueFri = readHabitSchedule({ routine_type: "weekly", routine_weekdays: ["火", "金"] });
+  assert.equal(habitScheduledTodayStatus(weeklyTueFri, today, true), null);
+
+  const weekdays = readHabitSchedule({ routine_type: "weekdays" });
+  assert.equal(habitScheduledTodayStatus(weekdays, today, false), false);
+  assert.equal(habitScheduledTodayStatus(weekdays, "2026-11-21", true), null);
+  const weekends = readHabitSchedule({ routine_type: "weekends" });
+  assert.equal(habitScheduledTodayStatus(weekends, today, true), null);
+  assert.equal(habitScheduledTodayStatus(weekends, "2026-11-21", true), true);
+
+  const monthDate19 = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: 19 });
+  assert.equal(habitScheduledTodayStatus(monthDate19, today, true), true);
+  const monthDate18 = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: 18 });
+  assert.equal(habitScheduledTodayStatus(monthDate18, today, true), null);
+  const monthLast = readHabitSchedule({ routine_type: "monthly_date", routine_monthday: "last" });
+  assert.equal(habitScheduledTodayStatus(monthLast, today, true), null);
+  assert.equal(habitScheduledTodayStatus(monthLast, "2026-11-30", true), true);
+
+  // 2026年11月19日は第3木曜日。最後の木曜日は 26 日。
+  const thirdThu = readHabitSchedule({
+    routine_type: "monthly",
+    routine_week: 3,
+    routine_weekday: "thursday",
+  });
+  assert.equal(habitScheduledTodayStatus(thirdThu, today, false), false);
+  assert.equal(habitScheduledTodayStatus(thirdThu, today, true), true);
+  const lastThu = readHabitSchedule({
+    routine_type: "monthly",
+    routine_week: "last",
+    routine_weekday: "thursday",
+  });
+  assert.equal(habitScheduledTodayStatus(lastThu, today, true), null);
+  assert.equal(habitScheduledTodayStatus(lastThu, "2026-11-26", true), true);
+  const thirdTue = readHabitSchedule({
+    routine_type: "monthly",
+    routine_week: 3,
+    routine_weekday: "tuesday",
+  });
+  assert.equal(habitScheduledTodayStatus(thirdTue, today, true), null);
+
+  const none = readHabitSchedule({});
+  assert.equal(habitScheduledTodayStatus(none, today, true), null);
+  assert.equal(habitScheduledTodayStatus(daily, "not-a-date", true), null);
+
+  const statuses = [
+    habitScheduledTodayStatus(daily, today, true),
+    habitScheduledTodayStatus(weeklyTueFri, today, true),
+    habitScheduledTodayStatus(weekdays, today, false),
+    habitScheduledTodayStatus(weekends, today, true),
+    habitScheduledTodayStatus(monthDate19, today, true),
+    habitScheduledTodayStatus(none, today, true),
+  ];
+  assert.deepEqual(summarizeHabitTargets(statuses), { met: 2, total: 3 });
+  assert.deepEqual(summarizeHabitTargets([null, null]), { met: 0, total: 0 });
+
+  const t = createTranslator("ja");
+  assert.equal(t("view.habitTargetsNone"), "目標達成：今日の予定なし");
+  assert.equal(t("view.habitTargetsTooltip"), "今日が予定日の習慣のうち、今日やった数");
+  const en = createTranslator("en");
+  assert.equal(en("view.habitTargetsNone"), "Targets met: none scheduled today");
+  assert.equal(en("view.habitTargetsTooltip"), "Number of habits scheduled for today that were done today");
 });

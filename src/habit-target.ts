@@ -362,3 +362,16 @@ export function summarizeHabitTargets(statuses: Array<boolean | null>): { met: n
   const shown = statuses.filter((status): status is boolean => status !== null);
   return { met: shown.filter((status) => status).length, total: shown.length };
 }
+
+/**
+ * 今日が予定日なら、今日やったかどうかを返す。予定日でなければ null。
+ * 予定日の決め方は、ヒートマップの枠（isHabitScheduled）と同じ。
+ */
+export function habitScheduledTodayStatus(
+  schedule: HabitSchedule,
+  todayKey: string,
+  doneToday: boolean
+): boolean | null {
+  if (!isHabitScheduled(schedule, todayKey)) return null;
+  return doneToday;
+}

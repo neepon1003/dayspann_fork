@@ -35,6 +35,7 @@ import {
   HabitTargetProgress,
   isHabitScheduled,
   sortHabitsByPending,
+  habitScheduledTodayStatus,
   summarizeHabitTargets,
   weekStreakTarget,
 } from "./habit-target";
@@ -275,9 +276,13 @@ export class DayspannView extends ItemView {
     const byName = records
       .filter((record) => !record.archived)
       .sort((a, b) => displayTitle(a.title).localeCompare(displayTitle(b.title)));
-    // 目標に届いたかは 1 回だけ調べて、上の数と並べ替えの両方に使う。
+    // 目標に届いたかは 1 回だけ調べて、並べ替えに使う（カードの日数と同じ決め方）。
     const metByRecord = new Map(byName.map((record) => [record, this.habitMet(record, logs, todayKey)]));
-    this.renderHabitSummary(heading, summarizeHabitTargets([...metByRecord.values()]));
+    // 上の「目標達成」は、今日が予定日の習慣のうち、今日やった数だけを数える。
+    this.renderHabitSummary(
+      heading,
+      summarizeHabitTargets(byName.map((record) => this.habitScheduledToday(record, logs, todayKey)))
+    );
     // まだ目標に届いていない習慣を上に、届いた習慣（✓）を下にする。見出しの中でも、この順番のまま並ぶ。
     const active = sortHabitsByPending(byName, (record) => metByRecord.get(record) ?? null);
     if (active.length) {
@@ -302,17 +307,18 @@ export class DayspannView extends ItemView {
     this.renderArchiveSection(root, archived, todayKey);
   }
 
-  /** 「目標達成：3/5」の 1 行。日数を出す習慣が無ければ出さない。全部届いたら ✓ を付けて緑にする。 */
+  /** 「目標達成：3/5」の 1 行。今日が予定日の習慣が無ければ「今日の予定なし」。全部やったら ✓ を付けて緑にする。 */
   private renderHabitSummary(heading: HTMLElement, summary: { met: number; total: number }): void {
-    if (!summary.total) return;
-    const allMet = summary.met === summary.total;
+    const allMet = summary.total > 0 && summary.met === summary.total;
     const line = heading.createDiv("dayspann-summary");
     const count = line.createSpan({
       cls: "dayspann-summary-habit",
-      text: this.plugin.t(allMet ? "view.habitTargetsAllMet" : "view.habitTargetsMet", {
-        met: summary.met,
-        total: summary.total,
-      }),
+      text: summary.total
+        ? this.plugin.t(allMet ? "view.habitTargetsAllMet" : "view.habitTargetsMet", {
+            met: summary.met,
+            total: summary.total,
+          })
+        : this.plugin.t("view.habitTargetsNone"),
     });
     if (allMet) count.addClass("dayspann-summary-habit--met");
     const tooltip = this.plugin.t("view.habitTargetsTooltip");
@@ -467,6 +473,20 @@ export class DayspannView extends ItemView {
       basename: record.file.basename,
     });
     return habitTargetProgress(record.habitTarget, counts, todayKey).met;
+  }
+
+  /**
+   * 今日が予定日の習慣なら、今日やったかどうかを返す。
+   * 予定日でない習慣、TaskChute とつながっていない習慣、アーカイブした習慣は null。
+   */
+  private habitScheduledToday(record: DayspannRecord, logs: HabitLogDays, todayKey: string): boolean | null {
+    if (!record.taskchute || record.archived) return null;
+    const counts = countHabitDays(logs, {
+      taskId: record.taskchute.taskId,
+      path: record.file.path,
+      basename: record.file.basename,
+    });
+    return habitScheduledTodayStatus(record.habitSchedule, todayKey, (counts[todayKey] ?? 0) > 0);
   }
 
   /** 名前の横の日数とツールチップ。目標に届いていれば ✓ を付けて出す。 */
