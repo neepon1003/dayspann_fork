@@ -1,5 +1,5 @@
-/** プロジェクト一覧の、期日があるカードの見出し。以前の当日・期日まで・期日超過をひとつにまとめたもの。 */
-export type DayspannSectionKind = "due";
+/** プロジェクト一覧の見出し。「期日順」と、今日の一覧に入っているカードの「今日やる」。 */
+export type DayspannSectionKind = "due" | "inToday";
 
 export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["due"];
 
@@ -18,12 +18,18 @@ export function parseSoonDays(value: unknown): number | null {
 export function normalizeCollapsedSections(value: unknown): DayspannSectionKind[] {
   if (!Array.isArray(value)) return [];
   const keys = value.filter((item): item is string => typeof item === "string");
+  const next: DayspannSectionKind[] = [];
+  // 「今日やる」は新しいキー inToday だけ。以前の「当日」の today は使わない（昔の折りたたみが、新しい見出しを閉じないようにする）。
+  if (keys.includes("inToday")) next.push("inToday");
   // 新しい「期日順」を折りたたんでいれば、それを使う。
-  if (keys.includes("due")) return ["due"];
+  if (keys.includes("due")) {
+    next.push("due");
+    return next;
+  }
   // 以前の「期日まで」と「期日超過」の両方が折りたたまれていたときだけ、新しい見出しも折りたたむ。
   // どちらか一方だけなら開く（片方のカードが急に隠れないようにする。「当日」は空で出ていないことも多いので、判定には使わない）。
-  if (keys.includes("future") && keys.includes("past")) return ["due"];
-  return [];
+  if (keys.includes("future") && keys.includes("past")) next.push("due");
+  return next;
 }
 
 /** 並び順の保存値を整える。期日ありの見出しは「期日順」ひとつになったので、いつも ["due"] にする。 */

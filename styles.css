@@ -18,6 +18,7 @@
 }
 
 .dayspann-section--today,
+.dayspann-section--inToday,
 .dayspann-card--today {
   --dayspann-accent: var(--interactive-accent);
 }
@@ -62,12 +63,52 @@
 .dayspann-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 1.25em;
+  align-items: center;
+  gap: 6px;
   margin: 10px 0 0;
   padding-right: 92px;
-  color: var(--text-normal);
-  font-size: var(--font-ui-small);
-  font-weight: 600;
+}
+
+/* 件数ピル。0件は控えめな枠だけ。1件以上は枠と文字を色付きにし、地は薄く（残日数ピルより弱く）。 */
+.dayspann-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, var(--background-modifier-border));
+  border-radius: 999px;
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.dayspann-summary-pill.is-week {
+  border-color: color-mix(in srgb, var(--dayspann-soon-color, #f97316) 70%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--dayspann-soon-color, #f97316) 16%, transparent);
+  background-color: color-mix(in srgb, var(--dayspann-soon-color, #f97316) 16%, transparent);
+  color: var(--dayspann-soon-color, #f97316);
+}
+
+.dayspann-summary-pill.is-overdue {
+  border-color: color-mix(in srgb, var(--dayspann-past-color, #ef4444) 70%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--dayspann-past-color, #ef4444) 16%, transparent);
+  background-color: color-mix(in srgb, var(--dayspann-past-color, #ef4444) 16%, transparent);
+  color: var(--dayspann-past-color, #ef4444);
+}
+
+.dayspann-summary-pill.is-done {
+  border-color: color-mix(in srgb, var(--dayspann-future-color, #22c55e) 70%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--dayspann-future-color, #22c55e) 16%, transparent);
+  background-color: color-mix(in srgb, var(--dayspann-future-color, #22c55e) 16%, transparent);
+  color: var(--dayspann-future-color, var(--color-green, #22c55e));
 }
 
 .dayspann-summary-overdue--alert {

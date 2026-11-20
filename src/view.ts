@@ -3,9 +3,6 @@ import type DayspannPlugin from "../main";
 import { planCardActions } from "./card-actions";
 import {
   compareArchiveOrder,
-  compareByDueDifference,
-  countThisMonth,
-  daysUntilEndOfWeek,
   differenceInCalendarDays,
   dueSoonDays,
   formatArchiveMonthParts,
@@ -13,6 +10,7 @@ import {
   formatLocalizedDate,
   groupByMonth,
   monthKey,
+  parseDateKey,
   postponeTargets,
   shiftDateKey,
   stalledDays,
@@ -31,6 +29,7 @@ import {
   sundayWeekNumber,
 } from "./habit-log";
 import { findPjSpanEntries } from "./habit-record";
+import { countProjectSummary, partitionProjectGroups } from "./project-groups";
 import {
   habitTargetProgress,
   HabitTargetProgress,
@@ -135,35 +134,20 @@ export class DayspannView extends ItemView {
       difference: record.date ? differenceInCalendarDays(record.date, today) : null,
     }));
 
-    const weekRemaining = daysUntilEndOfWeek(today);
-    const dueThisWeek = counted.filter(
-      (item) =>
-        !item.record.archived &&
-        item.difference !== null &&
-        item.difference >= 0 &&
-        item.difference <= weekRemaining
-    ).length;
-    const overdueCount = counted.filter(
-      (item) => !item.record.archived && item.difference !== null && item.difference < 0
-    ).length;
+    const counts = countProjectSummary(records, today);
     const summary = heading.createDiv("dayspann-summary");
     summary.createSpan({
-      text: this.plugin.t("view.dueThisWeek", { count: dueThisWeek }),
+      cls: "dayspann-summary-pill" + (counts.dueThisWeek > 0 ? " is-week" : ""),
+      text: this.plugin.t("view.dueThisWeek", { count: counts.dueThisWeek }),
     });
-    const overdue = summary.createSpan({
-      cls: "dayspann-summary-overdue",
-      text: this.plugin.t("view.overdueCount", { count: overdueCount }),
+    summary.createSpan({
+      cls: "dayspann-summary-pill" + (counts.overdue > 0 ? " is-overdue" : ""),
+      text: this.plugin.t("view.overdueCount", { count: counts.overdue }),
     });
-    if (overdueCount > 0) overdue.addClass("dayspann-summary-overdue--alert");
-    const doneThisMonth = countThisMonth(
-      counted.filter((item) => item.record.archived).map((item) => item.record.completed),
-      today
-    );
-    const done = summary.createSpan({
-      cls: "dayspann-summary-done",
-      text: this.plugin.t("view.doneThisMonth", { count: doneThisMonth }),
+    summary.createSpan({
+      cls: "dayspann-summary-pill" + (counts.doneThisMonth > 0 ? " is-done" : ""),
+      text: this.plugin.t("view.doneThisMonth", { count: counts.doneThisMonth }),
     });
-    if (doneThisMonth > 0) done.addClass("dayspann-summary-done--ok");
 
     if (!counted.length) {
       const empty = root.createDiv("dayspann-empty");
@@ -180,26 +164,20 @@ export class DayspannView extends ItemView {
       return;
     }
 
-    const active = counted.filter(
-      (item): item is CountedRecord & { difference: number } =>
-        !item.record.archived && item.difference !== null
-    );
-    const undated = counted
-      .filter((item) => !item.record.archived && item.difference === null)
-      .sort((a, b) => a.record.title.localeCompare(b.record.title));
-    const archived = counted
-      .filter((item) => item.record.archived)
-      .sort((a, b) =>
-        compareArchiveOrder(
-          a.record.completed,
-          b.record.completed,
-          a.record.date,
-          b.record.date
-        )
-      );
-    // 期日があるカードは「期日順」ひとつにまとめる。超過（遅れが大きいほど上）、今日、これから。
-    const dated = [...active].sort(
-      (a, b) => compareByDueDifference(a.difference, a.record.date, b.difference, b.record.date)
+    // 今日の一覧に入っているカードは「今日やる」へ。期日順・期日なしには出さない。完了はアーカイブへ。
+    const groups = partitionProjectGroups(records, today);
+    const toCounted = (list: typeof records): CountedRecord[] =>
+      list.map((record) => ({
+        record,
+        difference: parseDateKey(record.date) ? differenceInCalendarDays(record.date, today) : null,
+      }));
+
+    this.renderSection(
+      root,
+      "sun",
+      this.plugin.t("section.inToday"),
+      "inToday",
+      toCounted(groups.inToday)
     );
 
     this.renderSection(
@@ -207,7 +185,7 @@ export class DayspannView extends ItemView {
       "calendar-clock",
       this.plugin.t("section.due"),
       "due",
-      dated
+      toCounted(groups.dated)
     );
 
     this.renderSection(
@@ -215,10 +193,10 @@ export class DayspannView extends ItemView {
       "calendar-off",
       this.plugin.t("section.undated"),
       "undated",
-      undated
+      toCounted(groups.undated)
     );
 
-    this.renderArchiveSection(root, archived, today);
+    this.renderArchiveSection(root, toCounted(groups.archived), today);
   }
 
   /** 上のタブ（プロジェクト・習慣）。選んだタブは設定に覚えておき、次に開いたときもそのタブにする。 */

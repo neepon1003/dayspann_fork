@@ -81,6 +81,7 @@ import {
 import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import { buildDuePill } from "../src/due-pill";
+import { countProjectSummary, isInTodayList, partitionProjectGroups } from "../src/project-groups";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
@@ -296,6 +297,11 @@ test("「期日順」の折りたたみは、新しいキーか、以前の期�
   assert.deepEqual(normalizeCollapsedSections(["today"]), []);
   assert.deepEqual(normalizeCollapsedSections(["past", "past", "unknown", "today"]), []);
   assert.deepEqual(normalizeCollapsedSections(undefined), []);
+  // 「今日やる」は inToday だけ。以前の「当日」の today では折りたたまれない。
+  assert.deepEqual(normalizeCollapsedSections(["inToday"]), ["inToday"]);
+  assert.deepEqual(normalizeCollapsedSections(["inToday", "due"]), ["inToday", "due"]);
+  assert.deepEqual(normalizeCollapsedSections(["inToday", "today"]), ["inToday"]);
+  assert.deepEqual(normalizeCollapsedSections(["future", "past", "inToday"]), ["inToday", "due"]);
 });
 
 test("期日があるカードは、超過がいちばん上、次に今日、次にこれから（近い日が先）", () => {
@@ -335,6 +341,10 @@ test("Obsidianの日本語設定だけを日本語として扱い、それ以外
 test("日本語と英語の表示文言を切り替える", () => {
   assert.equal(createTranslator("ja")("section.due"), "期日順");
   assert.equal(createTranslator("en")("section.due"), "By due date");
+  assert.equal(createTranslator("ja")("section.inToday"), "今日やる");
+  assert.equal(createTranslator("en")("section.inToday"), "Do today");
+  assert.equal(createTranslator("ja")("section.heading", { title: "今日やる", count: 1 }), "今日やる（1）");
+  assert.equal(createTranslator("en")("section.heading", { title: "Do today", count: 1 }), "Do today (1)");
   assert.equal(createTranslator("ja")("section.future"), "期日まで");
   assert.equal(createTranslator("en")("section.future"), "Days remaining");
   assert.equal(
@@ -832,8 +842,12 @@ test("完了日を月ごとにまとめ、今月の件数を数える", () => {
   );
 
   assert.equal(formatArchiveMonthParts("2026-11", "en")?.monthName, "November");
-  assert.equal(createTranslator("ja")("view.doneThisMonth", { count: 3 }), "今月完了：3件");
-  assert.equal(createTranslator("en")("view.doneThisMonth", { count: 3 }), "Done this month: 3");
+  assert.equal(createTranslator("ja")("view.doneThisMonth", { count: 3 }), "今月完了 3");
+  assert.equal(createTranslator("en")("view.doneThisMonth", { count: 3 }), "Done this month 3");
+  assert.equal(createTranslator("ja")("view.dueThisWeek", { count: 0 }), "今週締切 0");
+  assert.equal(createTranslator("en")("view.dueThisWeek", { count: 0 }), "This week 0");
+  assert.equal(createTranslator("ja")("view.overdueCount", { count: 2 }), "超過 2");
+  assert.equal(createTranslator("en")("view.overdueCount", { count: 2 }), "Overdue 2");
   assert.equal(createTranslator("ja")("section.archiveMonth", { year: 2026, month: 11, count: 2 }), "2026年11月（2）");
   assert.equal(createTranslator("en")("section.archiveMonth", { year: 2026, monthName: "November", count: 2 }), "November 2026 (2)");
 });
@@ -2458,4 +2472,110 @@ test("プロジェクトの残日数ピルは、あと◯日・今日まで・�
   assert.equal(createTranslator("en")("view.dueByToday"), "Due today");
   assert.equal(createTranslator("ja")("view.noDate"), "期日なし");
   assert.equal(formatLocalizedDate("2026-11-27", "ja"), "2026年11月27日(金)");
+});
+
+test("ヘッダーの件数は、今週締切・超過・今月完了を、見出しの分け方とは別に数える", () => {
+  // 2026-11-20 は金曜。週の終わりは土曜なので、今日と明日だけが今週締切。
+  const today = "2026-11-20";
+  const records = [
+    { title: "今日まで", date: "2026-11-20", archived: false },
+    { title: "明日", date: "2026-11-21", archived: false },
+    { title: "来週", date: "2026-11-22", archived: false },
+    { title: "超過", date: "2026-11-19", archived: false },
+    { title: "期日なし", date: "", archived: false },
+    { title: "今月完了", date: "2026-11-10", archived: true, completed: "2026-11-18" },
+    { title: "先月完了", date: "2026-10-01", archived: true, completed: "2026-10-30" },
+    {
+      title: "今日やる（来週が期日）",
+      date: "2026-11-27",
+      archived: false,
+      taskchute: { targetDate: today },
+    },
+    {
+      title: "今日やる（今週が期日）",
+      date: "2026-11-21",
+      archived: false,
+      taskchute: { targetDate: today },
+    },
+  ];
+  assert.deepEqual(countProjectSummary(records, today), {
+    dueThisWeek: 3,
+    overdue: 1,
+    doneThisMonth: 1,
+  });
+});
+
+test("今日の一覧に入っているカードは「今日やる」にまとめ、期日順と期日なしには出さない", () => {
+  const today = "2026-11-20";
+  const dated = { title: "期日あり", date: "2026-11-27", archived: false };
+  const inTodayDated = {
+    title: "今日やる・期日あり",
+    date: "2026-11-27",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const undated = { title: "期日なし", date: "", archived: false };
+  const inTodayUndated = {
+    title: "今日やる・期日なし",
+    date: "",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const archivedToday = {
+    title: "完了（今日の日付が残っていても）",
+    date: "2026-11-10",
+    archived: true,
+    completed: "2026-11-18",
+    taskchute: { targetDate: today },
+  };
+  const otherDay = {
+    title: "別の日の一覧",
+    date: "2026-11-27",
+    archived: false,
+    taskchute: { targetDate: "2026-11-19" },
+  };
+  const notTaskChute = { title: "TaskChuteでない", date: "2026-11-15", archived: false };
+  const records = [dated, inTodayDated, undated, inTodayUndated, archivedToday, otherDay, notTaskChute];
+  assert.equal(isInTodayList(inTodayDated, today), true);
+  assert.equal(isInTodayList(inTodayUndated, today), true);
+  assert.equal(isInTodayList(archivedToday, today), false);
+  assert.equal(isInTodayList(otherDay, today), false);
+  const groups = partitionProjectGroups(records, today);
+  assert.deepEqual(
+    groups.inToday.map((row) => row.title),
+    ["今日やる・期日あり", "今日やる・期日なし"]
+  );
+  assert.deepEqual(
+    groups.dated.map((row) => row.title),
+    ["TaskChuteでない", "別の日の一覧", "期日あり"]
+  );
+  assert.deepEqual(
+    groups.undated.map((row) => row.title),
+    ["期日なし"]
+  );
+  assert.deepEqual(
+    groups.archived.map((row) => row.title),
+    ["完了（今日の日付が残っていても）"]
+  );
+});
+
+test("「今日やる」の並びは、超過、今日、これから、期日なしの順", () => {
+  const today = "2026-11-20";
+  const inToday = { taskchute: { targetDate: today } };
+  const records = [
+    { title: "これから", date: "2026-11-27", archived: false, ...inToday },
+    { title: "期日なし", date: "", archived: false, ...inToday },
+    { title: "超過", date: "2026-11-10", archived: false, ...inToday },
+    { title: "今日", date: "2026-11-20", archived: false, ...inToday },
+  ];
+  assert.deepEqual(
+    partitionProjectGroups(records, today).inToday.map((row) => row.title),
+    ["超過", "今日", "これから", "期日なし"]
+  );
+  assert.deepEqual(partitionProjectGroups([], today), {
+    inToday: [],
+    dated: [],
+    undated: [],
+    archived: [],
+  });
 });
