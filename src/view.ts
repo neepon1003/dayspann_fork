@@ -1149,7 +1149,7 @@ export class DayspannView extends ItemView {
       : this.plugin.t("view.done");
   }
 
-  /** 「今日やる」の文字ピル。今日の一覧に入っているときは「今日の一覧 ✓」にして、アクセント色のままにする。ツールチップはこれまでと同じ。 */
+  /** 「今日やる」の文字ピル。今日の一覧に入っているときは「今日 ✓」にして、アクセント色の塗りにする。ツールチップはこれまでと同じ。 */
   private todayButton(parent: HTMLElement, record: DayspannRecord, inToday: boolean): HTMLButtonElement {
     const tooltip = this.plugin.t(inToday ? "action.inTodayLabel" : "action.todayLabel");
     const button = parent.createEl("button", {

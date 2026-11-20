@@ -242,19 +242,32 @@
   min-height: 0;
   overflow: hidden;
   padding: 12px 10px 12px 12px;
-  border: 1px solid color-mix(in srgb, var(--dayspann-accent) 28%, var(--background-modifier-border));
+  /* 枠と地の色は控えめに。強い色は残日数ピルに任せる。 */
+  --dayspann-card-border-mix: 10%;
+  --dayspann-card-fill-mix: 2%;
+  --dayspann-card-border-mix-hover: 18%;
+  --dayspann-card-fill-mix-hover: 4%;
+  border: 1px solid color-mix(in srgb, var(--dayspann-accent) var(--dayspann-card-border-mix), var(--background-modifier-border));
   border-radius: 14px;
-  background: color-mix(in srgb, var(--dayspann-accent) 5%, var(--background-primary-alt));
+  background: color-mix(in srgb, var(--dayspann-accent) var(--dayspann-card-fill-mix), var(--background-primary-alt));
   cursor: pointer;
   transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
 }
 
 .dayspann-card:hover,
 .dayspann-card:focus-visible {
-  border-color: color-mix(in srgb, var(--dayspann-accent) 55%, var(--background-modifier-border-hover));
-  background: color-mix(in srgb, var(--dayspann-accent) 10%, var(--background-modifier-hover));
+  border-color: color-mix(in srgb, var(--dayspann-accent) var(--dayspann-card-border-mix-hover), var(--background-modifier-border-hover));
+  background: color-mix(in srgb, var(--dayspann-accent) var(--dayspann-card-fill-mix-hover), var(--background-modifier-hover));
   outline: none;
   transform: translateY(-1px);
+}
+
+/* 期日超過だけ、枠の赤みが少し残るようにする（いまよりは弱く）。 */
+.dayspann-card--overdue {
+  --dayspann-card-border-mix: 20%;
+  --dayspann-card-fill-mix: 4%;
+  --dayspann-card-border-mix-hover: 30%;
+  --dayspann-card-fill-mix-hover: 6%;
 }
 
 .dayspann-card-content {
@@ -491,29 +504,32 @@
   color: var(--text-muted);
 }
 
-/* 「今日やる」「完了」は、習慣の「✓ 今日やった」に近い小さな文字ピル（高さ約 26px）。縮めない。
+/* 「今日やる」「完了」は小さめの文字ピル（高さ 22px、文字 10.5px）。既定は控えめな枠だけ。縮めない。
+   今日の一覧に入っている「今日やる」だけ、アクセント色の塗りにする。
    Obsidian の `button:not(.clickable-icon)` と、スマホの `.is-mobile button:not(.clickable-icon)` が
    背景を `--interactive-normal`（暗い色）で上書きしないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon),
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon) {
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon),
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon),
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   flex: 0 0 auto;
   box-sizing: border-box;
-  height: 26px;
-  min-height: 26px;
+  height: 22px;
+  min-height: 22px;
   width: auto;
   min-width: 0;
-  padding: 0 8px;
-  border: 1px solid var(--interactive-accent);
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, var(--background-modifier-border));
   border-radius: 999px;
-  background: var(--interactive-accent);
-  background-color: var(--interactive-accent);
+  background: transparent;
+  background-color: transparent;
   box-shadow: none;
-  color: var(--text-on-accent);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: 10.5px;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -523,16 +539,20 @@
 }
 
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon):hover,
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon):hover {
-  background: var(--interactive-accent-hover, var(--interactive-accent));
-  background-color: var(--interactive-accent-hover, var(--interactive-accent));
-  border-color: var(--interactive-accent-hover, var(--interactive-accent));
-  color: var(--text-on-accent);
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon):hover,
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):hover,
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):hover {
+  border-color: var(--text-muted);
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-normal);
 }
 
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon):focus-visible,
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon):focus-visible {
-  outline: 2px solid var(--interactive-accent);
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon):focus-visible,
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible,
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible {
+  outline: 2px solid var(--text-muted);
   outline-offset: 2px;
 }
 
@@ -542,61 +562,30 @@
 }
 
 .dayspann-today-check svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
 }
 
-/* 今日の一覧に入っているときは、チェックと「今日の一覧」を出す。塗りはアクセント色のまま。 */
+/* 今日の一覧に入っているときだけ、アクセント色の塗り（「✓ 今日」）。 */
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done,
-.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover,
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done,
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover {
-  padding: 0 8px;
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done {
   border-color: var(--interactive-accent);
   background: var(--interactive-accent);
   background-color: var(--interactive-accent);
   color: var(--text-on-accent);
 }
 
-/* 「完了」は控えめな枠だけのピル。 */
-.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon),
-.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  height: 26px;
-  min-height: 26px;
-  width: auto;
-  min-width: 0;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, var(--background-modifier-border));
-  border-radius: 999px;
-  background: transparent;
-  background-color: transparent;
-  box-shadow: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
+.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover,
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover {
+  border-color: var(--interactive-accent-hover, var(--interactive-accent));
+  background: var(--interactive-accent-hover, var(--interactive-accent));
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
+  color: var(--text-on-accent);
 }
 
-.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):hover,
-.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):hover {
-  border-color: var(--text-muted);
-  background: transparent;
-  background-color: transparent;
-  color: var(--text-normal);
-}
-
-.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible,
-.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible {
-  outline: 2px solid var(--text-muted);
+.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:focus-visible,
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:focus-visible {
+  outline: 2px solid var(--interactive-accent);
   outline-offset: 2px;
 }
 
