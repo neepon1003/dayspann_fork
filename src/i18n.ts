@@ -96,6 +96,7 @@ const JA_MESSAGES = {
   "view.emptyDescription": "文章を選択して、コマンドまたは右クリックから「PJ-spanに登録」を実行してください。",
   "view.openRecord": "{title}を開く",
   "view.dueToday": "今日",
+  "view.dueByToday": "今日まで",
   "view.noDate": "期日なし",
   "view.overdueSuffix": "遅れ",
   "view.dueThisWeek": "今週締め切り：{count}件",
@@ -112,6 +113,7 @@ const JA_MESSAGES = {
   "view.done": "完了",
   "view.doneOn": "完了 {date}",
   "view.nextAction": "次の一手",
+  "section.due": "期日順",
   "section.future": "期日まで",
   "section.today": "当日",
   "section.past": "期日超過",
@@ -131,7 +133,7 @@ const JA_MESSAGES = {
   "setting.pastColorDesc": "過去の日付に使う色です",
   "setting.resetColor": "初期色に戻す",
   "setting.soonDays": "期日が近い印をつけるまでの日数",
-  "setting.soonDaysDesc": "期日まであとこの日数以内（今日を含む）のカードを、オレンジ色と時計の印で知らせます（0〜365。0にするとオフ）",
+  "setting.soonDaysDesc": "期日まであとこの日数以内（今日を含む）のカードを、オレンジ色の残日数で知らせます（0〜365。0にするとオフ）",
   "setting.stalledDays": "止まっている印をつけるまでの日数",
   "setting.stalledDaysDesc": "ノートをこの日数以上更新していないカードに印をつけます（0〜365。0にするとオフ）",
   "stalled.tooltip": "{days}日より前から更新されていません",
@@ -323,6 +325,7 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "view.emptyDescription": "Select some text, then run “Add to PJ-span” from the command palette or context menu.",
   "view.openRecord": "Open {title}",
   "view.dueToday": "Today",
+  "view.dueByToday": "Due today",
   "view.noDate": "No due date",
   "view.overdueSuffix": "late",
   "view.dueThisWeek": "Due this week: {count}",
@@ -339,6 +342,7 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "view.done": "Done",
   "view.doneOn": "Done {date}",
   "view.nextAction": "Next action",
+  "section.due": "By due date",
   "section.future": "Days remaining",
   "section.today": "Today",
   "section.past": "Days elapsed",
@@ -358,7 +362,7 @@ const EN_MESSAGES: Record<TranslationKey, string> = {
   "setting.pastColorDesc": "The color used for past dates.",
   "setting.resetColor": "Reset to default color",
   "setting.soonDays": "Days before a due-soon marker appears",
-  "setting.soonDaysDesc": "Mark cards due within this many days (including today) in orange with a clock icon (0-365; 0 turns it off).",
+  "setting.soonDaysDesc": "Mark cards due within this many days (including today) with an orange remaining-days pill (0-365; 0 turns it off).",
   "setting.stalledDays": "Days before a stalled marker appears",
   "setting.stalledDaysDesc": "Mark cards whose notes have not been updated for this many days (0-365; 0 turns it off).",
   "stalled.tooltip": "Not updated for more than {days} days",
@@ -492,4 +496,16 @@ export function durationUnit(
 export function formatCountUnit(locale: DayspannLocale, value: number, unit: "day" | "week"): string {
   const label = durationUnit(locale, unit, value);
   return locale === "ja" ? `${value}${label}` : `${value} ${label}`;
+}
+
+/** 残日数ピル。日本語は「あと7日」、英語は "7 days left"（1日だけ "1 day left"）。 */
+export function formatDueRemaining(locale: DayspannLocale, days: number): string {
+  if (locale === "ja") return `あと${days}日`;
+  return days === 1 ? "1 day left" : `${days} days left`;
+}
+
+/** 期日超過のピル。日本語は「3日超過」、英語は "3 days overdue"（1日だけ "1 day overdue"）。 */
+export function formatDueOverdue(locale: DayspannLocale, days: number): string {
+  if (locale === "ja") return `${days}日超過`;
+  return days === 1 ? "1 day overdue" : `${days} days overdue`;
 }

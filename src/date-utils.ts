@@ -101,6 +101,19 @@ export function shiftDateKey(dateKey: string, days: number): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * 期日があるプロジェクトを、期日の早い順に並べる。
+ * 超過がいちばん上（遅れが大きいほど上）、そのあと今日、そのあとこれから（近い日が先）。
+ */
+export function compareByDueDifference(
+  leftDiff: number,
+  leftDate: string,
+  rightDiff: number,
+  rightDate: string
+): number {
+  return leftDiff - rightDiff || leftDate.localeCompare(rightDate);
+}
+
 export function differenceInCalendarDays(
   targetDateKey: string,
   todayDateKey: string

@@ -1,6 +1,7 @@
-export type DayspannSectionKind = "future" | "today" | "past";
+/** プロジェクト一覧の、期日があるカードの見出し。以前の当日・期日まで・期日超過をひとつにまとめたもの。 */
+export type DayspannSectionKind = "due";
 
-export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["today", "future", "past"];
+export const DEFAULT_SECTION_ORDER: DayspannSectionKind[] = ["due"];
 
 export const DEFAULT_SOON_DAYS = 7;
 export const DEFAULT_STALLED_DAYS = 3;
@@ -14,38 +15,20 @@ export function parseSoonDays(value: unknown): number | null {
   return days <= MAX_SOON_DAYS ? days : null;
 }
 
-const SECTION_KINDS = new Set<DayspannSectionKind>(DEFAULT_SECTION_ORDER);
-
 export function normalizeCollapsedSections(value: unknown): DayspannSectionKind[] {
   if (!Array.isArray(value)) return [];
-
-  const normalized: DayspannSectionKind[] = [];
-  for (const item of value) {
-    if (typeof item === "string" && SECTION_KINDS.has(item as DayspannSectionKind)) {
-      const kind = item as DayspannSectionKind;
-      if (!normalized.includes(kind)) normalized.push(kind);
-    }
-  }
-  return normalized;
+  const keys = value.filter((item): item is string => typeof item === "string");
+  // 新しい「期日順」を折りたたんでいれば、それを使う。
+  if (keys.includes("due")) return ["due"];
+  // 以前の「期日まで」と「期日超過」の両方が折りたたまれていたときだけ、新しい見出しも折りたたむ。
+  // どちらか一方だけなら開く（片方のカードが急に隠れないようにする。「当日」は空で出ていないことも多いので、判定には使わない）。
+  if (keys.includes("future") && keys.includes("past")) return ["due"];
+  return [];
 }
 
-export function normalizeSectionOrder(value: unknown): DayspannSectionKind[] {
-  const normalized: DayspannSectionKind[] = [];
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      if (typeof item === "string" && SECTION_KINDS.has(item as DayspannSectionKind)) {
-        const kind = item as DayspannSectionKind;
-        if (!normalized.includes(kind)) normalized.push(kind);
-      }
-    }
-  }
-
-  for (const kind of DEFAULT_SECTION_ORDER) {
-    if (!normalized.includes(kind)) normalized.push(kind);
-  }
-
-  return normalized;
+/** 並び順の保存値を整える。期日ありの見出しは「期日順」ひとつになったので、いつも ["due"] にする。 */
+export function normalizeSectionOrder(_value: unknown): DayspannSectionKind[] {
+  return ["due"];
 }
 
 /** 分類が一つもないときの「習慣」見出しのキー。その他（空文字）とは別に覚える。 */

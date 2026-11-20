@@ -3,13 +3,13 @@ import type DayspannPlugin from "../main";
 import { planCardActions } from "./card-actions";
 import {
   compareArchiveOrder,
+  compareByDueDifference,
   countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
   dueSoonDays,
   formatArchiveMonthParts,
   formatCompletedCardDate,
-  formatDateSpan,
   formatLocalizedDate,
   groupByMonth,
   monthKey,
@@ -17,6 +17,7 @@ import {
   shiftDateKey,
   stalledDays,
 } from "./date-utils";
+import { buildDuePill, DuePillModel } from "./due-pill";
 import { groupHabitsByCategory, partitionHabitsDoneToday } from "./habit-category";
 import {
   buildHeatmapWeeks,
@@ -40,7 +41,7 @@ import {
   summarizeHabitTargets,
   weekStreakTarget,
 } from "./habit-target";
-import { durationUnit, formatCountUnit } from "./i18n";
+import { formatCountUnit, formatDueOverdue, formatDueRemaining } from "./i18n";
 import { choosePostponeDate } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, habitNextAction, splitTitle } from "./note-template";
@@ -196,27 +197,18 @@ export class DayspannView extends ItemView {
           b.record.date
         )
       );
-    const future = active
-      .filter((item) => item.difference > 0)
-      .sort((a, b) => a.difference - b.difference || a.record.date.localeCompare(b.record.date));
-    const todayRecords = active.filter((item) => item.difference === 0);
-    const past = active
-      .filter((item) => item.difference < 0)
-      .sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+    // 期日があるカードは「期日順」ひとつにまとめる。超過（遅れが大きいほど上）、今日、これから。
+    const dated = [...active].sort(
+      (a, b) => compareByDueDifference(a.difference, a.record.date, b.difference, b.record.date)
+    );
 
-    const sections: Record<
-      DayspannSectionKind,
-      { icon: string; title: string; items: CountedRecord[] }
-    > = {
-      future: { icon: "calendar-clock", title: this.plugin.t("section.future"), items: future },
-      today: { icon: "circle-check", title: this.plugin.t("section.today"), items: todayRecords },
-      past: { icon: "triangle-alert", title: this.plugin.t("section.past"), items: past },
-    };
-
-    for (const kind of this.plugin.settings.sectionOrder) {
-      const section = sections[kind];
-      this.renderSection(root, section.icon, section.title, kind, section.items);
-    }
+    this.renderSection(
+      root,
+      "calendar-clock",
+      this.plugin.t("section.due"),
+      "due",
+      dated
+    );
 
     this.renderSection(
       root,
@@ -941,6 +933,13 @@ export class DayspannView extends ItemView {
     }
     if (record.archived) {
       card.addClass("dayspann-card--done");
+    } else if (difference !== null && difference < 0) {
+      // 見出しをひとつにまとめたあとでも、超過のカードは赤、これから先は緑、今日はアクセント色にする。
+      card.addClass("dayspann-card--overdue");
+    } else if (difference === 0) {
+      card.addClass("dayspann-card--today");
+    } else if (difference !== null && difference > 0) {
+      card.addClass("dayspann-card--upcoming");
     }
     card.tabIndex = 0;
     card.setAttribute("role", "button");
@@ -974,25 +973,29 @@ export class DayspannView extends ItemView {
 
     // 頭文字の四角は出さず、名前をカードの左端から出す（習慣のカードと同じ）。
     const title = displayTitle(record.title);
+    const todayKey = this.plugin.todayKey();
+    const locale = this.plugin.locale();
+    const pill = buildDuePill(record, todayKey, this.plugin.settings.soonDays);
 
     const content = card.createDiv("dayspann-card-content");
-    content.createEl("h3", { text: title });
-    if (record.date) {
-      content.createDiv({
-        text: formatLocalizedDate(record.date, this.plugin.locale()),
-        cls: "dayspann-card-date",
-      });
-    }
+    const head = content.createDiv("dayspann-project-head");
+    const headText = head.createDiv("dayspann-project-head-text");
+    headText.createEl("h3", { text: title });
+    const headActions = head.createDiv("dayspann-project-head-actions");
+    this.renderDuePill(headActions, pill, locale);
+
     if (record.goal) {
       const goal = content.createDiv({ cls: "dayspann-card-goal" });
       setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
       goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
       setTooltip(goal, record.goal);
     }
+
     // 完了していないカードは、タイトルの「｜」より後ろを「次の一手」として出す。
     const nextAction = record.archived ? "" : splitTitle(record.title).nextAction;
+    const actionRow = content.createDiv(nextAction ? "dayspann-card-next-row" : "dayspann-project-action-row");
     if (nextAction) {
-      const next = content.createDiv({ cls: "dayspann-card-next" });
+      const next = actionRow.createDiv({ cls: "dayspann-card-next" });
       const icon = next.createSpan("dayspann-card-next-icon");
       setIcon(icon, "arrow-right");
       icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
@@ -1005,86 +1008,42 @@ export class DayspannView extends ItemView {
       content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
     }
 
-    // 日数とボタンを同じ行に並べて、カードの高さを抑える。
-    const countRow = card.createDiv("dayspann-count-row");
-    const count = countRow.createDiv("dayspann-count");
-    // 期日が近いカードは、日数の前に時計の印を出す。
-    if (dueSoon !== null) {
-      const icon = count.createSpan("dayspann-count-soon-icon");
-      setIcon(icon, "clock");
-      const tooltip = dueSoon === 0
-        ? this.plugin.t("dueSoon.today")
-        : dueSoon === 1
-          ? this.plugin.t("dueSoon.tomorrow")
-          : this.plugin.t("dueSoon.tooltip", { days: dueSoon });
-      setTooltip(count, tooltip);
-      icon.setAttribute("aria-label", tooltip);
-    }
-    if (record.archived) {
-      const completedDate = record.completed
-        ? formatCompletedCardDate(record.completed, this.plugin.todayKey(), this.plugin.locale())
-        : "";
-      count.createSpan({
-        text: completedDate
-          ? this.plugin.t("view.doneOn", { date: completedDate })
-          : this.plugin.t("view.done"),
-        cls: "dayspann-count-done",
-      });
-    } else if (difference === null) {
-      count.createSpan({ text: this.plugin.t("view.noDate"), cls: "dayspann-count-today" });
-    } else if (difference === 0) {
-      count.createSpan({ text: this.plugin.t("view.dueToday"), cls: "dayspann-count-today" });
-    } else {
-      const parts = formatDateSpan(record.date, this.plugin.todayKey(), record.displayMode);
-      if (parts.length > 1) count.addClass("dayspann-count--compound");
-      for (const part of parts) {
-        const segment = count.createSpan("dayspann-count-segment");
-        segment.createSpan({ text: String(part.value), cls: "dayspann-count-number" });
-        segment.createSpan({
-          text: durationUnit(this.plugin.locale(), part.unit, part.value),
-          cls: "dayspann-count-unit",
-        });
-      }
-      if (difference < 0) {
-	count.createSpan({
-	 text: this.plugin.t("view.overdueSuffix"),
-	 cls: "dayspann-count-unit dayspann-count-suffix",
-	});
-       }		
-    }
-
-    // 完了していない記録で、ノートを設定の日数以上更新していなければ印を出す。
+    // 次の一手があるときはその右端に、ないときは右寄せの専用行に、☀ ✓ … を並べる。
+    const plan = planCardActions(record, todayKey);
     const stalled = record.archived || record.completed
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
+    const actions = actionRow.createDiv("dayspann-card-actions dayspann-project-line-actions");
     if (stalled !== null) {
-      const mark = countRow.createDiv("dayspann-stalled");
+      const mark = actions.createDiv("dayspann-stalled");
       setIcon(mark, "hourglass");
       const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
       setTooltip(mark, tooltip);
       mark.setAttribute("aria-label", tooltip);
     }
-
-    const plan = planCardActions(record, this.plugin.todayKey());
-    const actions = countRow.createDiv("dayspann-card-actions");
     if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
-    if (plan.overdueActions) {
-      this.textButton(actions, "calendar-clock", this.plugin.t("action.postpone"), (event) => {
-        this.openPostponeMenu(event, record);
-      });
-      this.textButton(actions, "check", this.plugin.t("action.completeOverdue"), () => {
-        void this.plugin.setRecordArchived(record, true);
-      });
-    }
     if (plan.complete) {
-      this.iconButton(actions, "check", this.plugin.t("action.complete"), () => {
-        void this.plugin.setRecordArchived(record, true);
-      });
+      this.iconButton(
+        actions,
+        "check",
+        this.plugin.t(plan.overdueActions ? "action.completeOverdue" : "action.complete"),
+        () => {
+          void this.plugin.setRecordArchived(record, true);
+        }
+      );
     }
     const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = new Menu();
+      if (plan.overdueActions) {
+        menu.addItem((menuItem) =>
+          menuItem.setTitle(this.plugin.t("action.postpone")).setIcon("calendar-clock").onClick((click) => {
+            this.openPostponeMenu(click as MouseEvent, record);
+          })
+        );
+        menu.addSeparator();
+      }
       if (plan.postponeInMenu) {
         menu.addItem((menuItem) =>
           menuItem.setTitle(this.plugin.t("action.postponeWeek")).setIcon("calendar-plus").onClick(() => void this.plugin.postponeRecord(record, 7))
@@ -1160,6 +1119,33 @@ export class DayspannView extends ItemView {
         .setIcon(archived ? "archive-restore" : "archive")
         .onClick(() => void this.plugin.setRecordArchived(record, !archived))
     );
+  }
+
+  /** 名前の右に出す残日数ピル。ツールチップは期日の全文（例：2026年11月27日(金)）。 */
+  private renderDuePill(parent: HTMLElement, pill: DuePillModel, locale: "ja" | "en"): void {
+    const text = this.duePillText(pill, locale);
+    const el = parent.createSpan({ text, cls: `dayspann-due-pill is-${pill.appearance}` });
+    const tooltip = pill.tooltipDateKey
+      ? formatLocalizedDate(pill.tooltipDateKey, locale)
+      : text;
+    if (tooltip) {
+      el.setAttribute("title", tooltip);
+      setTooltip(el, tooltip);
+      el.setAttribute("aria-label", tooltip === text ? text : `${text}（${tooltip}）`);
+    }
+  }
+
+  private duePillText(pill: DuePillModel, locale: "ja" | "en"): string {
+    if (pill.kind === "remaining") return formatDueRemaining(locale, pill.days ?? 0);
+    if (pill.kind === "overdue") return formatDueOverdue(locale, pill.days ?? 0);
+    if (pill.kind === "today") return this.plugin.t("view.dueByToday");
+    if (pill.kind === "none") return this.plugin.t("view.noDate");
+    const completedDate = pill.completedDateKey
+      ? formatCompletedCardDate(pill.completedDateKey, this.plugin.todayKey(), locale)
+      : "";
+    return completedDate
+      ? this.plugin.t("view.doneOn", { date: completedDate })
+      : this.plugin.t("view.done");
   }
 
   /** 「今日やる」ボタン。今日の一覧に入っているときは枠だけの「入っています」の形にする。 */

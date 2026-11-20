@@ -5,13 +5,13 @@ import type { DayspannRecord } from "./model";
 export type TodayButtonState = "none" | "add" | "inToday";
 
 export interface CardActionPlan {
-  /** 日数の横に出す「今日やる」（太陽アイコン）の状態 */
+  /** 「今日やる」（太陽アイコン）の状態 */
   today: TodayButtonState;
-  /** 日数の横に ✓（完了）を出すか。期日超過では「完了する」ボタンを出すので、こちらは出さない。 */
+  /** ✓（完了）を出すか。期日超過でもアイコンの ✓ を出す。 */
   complete: boolean;
   /** 「…」メニューに「期日を1週間延ばす」を入れるか */
   postponeInMenu: boolean;
-  /** 期日超過のカードに「延期する」「完了する」を出すか */
+  /** 期日超過のとき、「延期する」（日付を選ぶ）を「…」メニューに入れるか */
   overdueActions: boolean;
 }
 
@@ -27,7 +27,7 @@ export function planCardActions(record: CardActionRecord, todayKey: string): Car
   }
   return {
     today,
-    complete: active && !overdue,
+    complete: active,
     postponeInMenu: active && Boolean(record.date),
     overdueActions: overdue,
   };

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   compareArchiveOrder,
+  compareByDueDifference,
   countThisMonth,
   daysUntilEndOfWeek,
   differenceInCalendarDays,
@@ -23,7 +24,7 @@ import {
   stalledDays,
   toDateKey,
 } from "../src/date-utils";
-import { createTranslator, durationUnit, formatCountUnit, resolveLocale } from "../src/i18n";
+import { createTranslator, durationUnit, formatCountUnit, formatDueOverdue, formatDueRemaining, resolveLocale } from "../src/i18n";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cwd } from "node:process";
@@ -79,6 +80,7 @@ import {
 } from "../src/source-link";
 import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
+import { buildDuePill } from "../src/due-pill";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
@@ -277,29 +279,38 @@ test("未来と過去で表示期間の値は変わらない", () => {
   );
 });
 
-test("セクションの並び順を保存値から復元する", () => {
-  assert.deepEqual(normalizeSectionOrder(["past", "future", "today"]), [
-    "past",
-    "future",
-    "today",
-  ]);
+test("期日ありの見出しは「期日順」ひとつにまとまり、古い並び順の保存値は使わない", () => {
+  assert.deepEqual(normalizeSectionOrder(["past", "future", "today"]), ["due"]);
+  assert.deepEqual(normalizeSectionOrder(undefined), ["due"]);
+  assert.deepEqual(normalizeSectionOrder(["past", "past", "unknown"]), ["due"]);
 });
 
-test("古い設定や不正な並び順には不足項目を補う", () => {
-  assert.deepEqual(normalizeSectionOrder(undefined), ["today", "future", "past"]);
-  assert.deepEqual(normalizeSectionOrder(["past", "past", "unknown"]), [
-    "past",
-    "today",
-    "future",
-  ]);
-});
-
-test("折りたたみ状態は有効なセクションだけ重複なく復元する", () => {
-  assert.deepEqual(normalizeCollapsedSections(["past", "past", "unknown", "today"]), [
-    "past",
-    "today",
-  ]);
+test("「期日順」の折りたたみは、新しいキーか、以前の期日までと期日超過の両方から引き継ぐ", () => {
+  assert.deepEqual(normalizeCollapsedSections(["due"]), ["due"]);
+  // 以前の「期日まで」と「期日超過」の両方が折りたたまれていたときだけ折りたたむ。
+  assert.deepEqual(normalizeCollapsedSections(["future", "past"]), ["due"]);
+  assert.deepEqual(normalizeCollapsedSections(["future", "past", "today"]), ["due"]);
+  // 片方だけ折りたたまれていたときは開く（カードが急に隠れないようにする）。
+  assert.deepEqual(normalizeCollapsedSections(["future"]), []);
+  assert.deepEqual(normalizeCollapsedSections(["past"]), []);
+  assert.deepEqual(normalizeCollapsedSections(["today"]), []);
+  assert.deepEqual(normalizeCollapsedSections(["past", "past", "unknown", "today"]), []);
   assert.deepEqual(normalizeCollapsedSections(undefined), []);
+});
+
+test("期日があるカードは、超過がいちばん上、次に今日、次にこれから（近い日が先）", () => {
+  const rows = [
+    { date: "2026-11-28", diff: 8 },
+    { date: "2026-11-17", diff: -3 },
+    { date: "2026-11-20", diff: 0 },
+    { date: "2026-11-10", diff: -10 },
+    { date: "2026-11-27", diff: 7 },
+  ];
+  rows.sort((a, b) => compareByDueDifference(a.diff, a.date, b.diff, b.date));
+  assert.deepEqual(
+    rows.map((row) => row.date),
+    ["2026-11-10", "2026-11-17", "2026-11-20", "2026-11-27", "2026-11-28"]
+  );
 });
 
 test("「もうすぐ」の日数は0〜365の整数だけを受け付ける", () => {
@@ -322,6 +333,8 @@ test("Obsidianの日本語設定だけを日本語として扱い、それ以外
 });
 
 test("日本語と英語の表示文言を切り替える", () => {
+  assert.equal(createTranslator("ja")("section.due"), "期日順");
+  assert.equal(createTranslator("en")("section.due"), "By due date");
   assert.equal(createTranslator("ja")("section.future"), "期日まで");
   assert.equal(createTranslator("en")("section.future"), "Days remaining");
   assert.equal(
@@ -759,7 +772,7 @@ test("延期の候補日は今日から数え、期日超過のカードには�
 
   assert.deepEqual(planCardActions({ archived: false, date: "2026-11-10" }, "2026-11-16"), {
     today: "none",
-    complete: false,
+    complete: true,
     postponeInMenu: true,
     overdueActions: true,
   });
@@ -768,7 +781,7 @@ test("延期の候補日は今日から数え、期日超過のカードには�
       { archived: false, date: "2026-11-10", taskchute: { targetDate: "2026-11-16" } },
       "2026-11-16"
     ),
-    { today: "inToday", complete: false, postponeInMenu: true, overdueActions: true }
+    { today: "inToday", complete: true, postponeInMenu: true, overdueActions: true }
   );
   assert.equal(planCardActions({ archived: false, date: "2026-11-16" }, "2026-11-16").overdueActions, false);
   assert.equal(planCardActions({ archived: false, date: "" }, "2026-11-16").overdueActions, false);
@@ -2383,4 +2396,60 @@ test("parsePreviousHabitMemo reads the newest ログ memo, including multi-line 
   assert.equal(t("habitMemo.previous", { date: "11月18日", text: "45から解いた" }), "前回（11月18日）：45から解いた");
   const en = createTranslator("en");
   assert.equal(en("habitMemo.previous", { date: "11月18日", text: "45から解いた" }), "Previous (11月18日): 45から解いた");
+});
+
+test("プロジェクトの残日数ピルは、あと◯日・今日まで・超過・期日なしを出し分ける", () => {
+  const today = "2026-11-20";
+  assert.deepEqual(buildDuePill({ archived: false, date: "2026-11-27" }, today, 7), {
+    kind: "remaining",
+    appearance: "soon",
+    days: 7,
+    tooltipDateKey: "2026-11-27",
+  });
+  assert.deepEqual(buildDuePill({ archived: false, date: "2026-11-28" }, today, 7), {
+    kind: "remaining",
+    appearance: "ok",
+    days: 8,
+    tooltipDateKey: "2026-11-28",
+  });
+  assert.deepEqual(buildDuePill({ archived: false, date: "2026-11-20" }, today, 7), {
+    kind: "today",
+    appearance: "soon",
+    days: 0,
+    tooltipDateKey: "2026-11-20",
+  });
+  // 設定の「期日が近い」がオフでも、今日が期日ならオレンジの「今日まで」。
+  assert.equal(buildDuePill({ archived: false, date: "2026-11-20" }, today, 0).appearance, "soon");
+  // 7日以内のオレンジは、設定の soonDays に合わせる（0 ならオレンジにしない）。
+  assert.equal(buildDuePill({ archived: false, date: "2026-11-27" }, today, 0).appearance, "ok");
+  assert.deepEqual(buildDuePill({ archived: false, date: "2026-11-17" }, today, 7), {
+    kind: "overdue",
+    appearance: "overdue",
+    days: 3,
+    tooltipDateKey: "2026-11-17",
+  });
+  assert.deepEqual(buildDuePill({ archived: false, date: "" }, today, 7), {
+    kind: "none",
+    appearance: "muted",
+  });
+  assert.deepEqual(
+    buildDuePill({ archived: true, completed: "2026-11-16", date: "2026-11-30" }, today, 7),
+    {
+      kind: "done",
+      appearance: "muted",
+      tooltipDateKey: "2026-11-16",
+      completedDateKey: "2026-11-16",
+    }
+  );
+
+  assert.equal(formatDueRemaining("ja", 7), "あと7日");
+  assert.equal(formatDueRemaining("en", 7), "7 days left");
+  assert.equal(formatDueRemaining("en", 1), "1 day left");
+  assert.equal(formatDueOverdue("ja", 3), "3日超過");
+  assert.equal(formatDueOverdue("en", 3), "3 days overdue");
+  assert.equal(formatDueOverdue("en", 1), "1 day overdue");
+  assert.equal(createTranslator("ja")("view.dueByToday"), "今日まで");
+  assert.equal(createTranslator("en")("view.dueByToday"), "Due today");
+  assert.equal(createTranslator("ja")("view.noDate"), "期日なし");
+  assert.equal(formatLocalizedDate("2026-11-27", "ja"), "2026年11月27日(金)");
 });

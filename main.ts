@@ -933,9 +933,11 @@ export default class DayspannPlugin extends Plugin {
   }
 
   async setSectionCollapsed(kind: DayspannSectionKind, collapsed: boolean): Promise<void> {
-    const collapsedSections = this.settings.collapsedSections.filter((item) => item !== kind);
-    if (collapsed) collapsedSections.push(kind);
-    this.settings.collapsedSections = collapsedSections;
+    this.settings.collapsedSections = toggleCollapsedKey(
+      this.settings.collapsedSections,
+      kind,
+      collapsed
+    ) as DayspannSectionKind[];
     await this.saveSettings();
   }
 
@@ -1246,15 +1248,6 @@ class DayspannSettingTab extends PluginSettingTab {
         },
       },
       {
-        type: "list",
-        heading: this.plugin.t("setting.sectionOrder"),
-        items: this.plugin.settings.sectionOrder.map((kind, index) => ({
-          name: this.sectionTitle(kind),
-          desc: this.plugin.t("setting.position", { position: index + 1 }),
-        })),
-        onReorder: (from, to) => void this.moveSection(from, to),
-      },
-      {
         type: "group",
         heading: this.plugin.t("setting.colors"),
         items: [
@@ -1388,26 +1381,6 @@ class DayspannSettingTab extends PluginSettingTab {
     this.plugin.settings.storageFolder = value.trim() || DEFAULT_SETTINGS.storageFolder;
     await this.plugin.saveSettings();
     await this.plugin.refreshViews();
-  }
-
-  private sectionTitle(kind: DayspannSectionKind): string {
-    if (kind === "future") return this.plugin.t("section.future");
-    if (kind === "today") return this.plugin.t("section.today");
-    return this.plugin.t("section.past");
-  }
-
-  private async moveSection(from: number, to: number): Promise<void> {
-    if (to < 0 || to >= this.plugin.settings.sectionOrder.length) return;
-
-    const order = [...this.plugin.settings.sectionOrder];
-    const [section] = order.splice(from, 1);
-    if (!section) return;
-    order.splice(to, 0, section);
-    this.plugin.settings.sectionOrder = order;
-
-    await this.plugin.saveSettings();
-    await this.plugin.refreshViews();
-    this.update();
   }
 
   private async setColor(
