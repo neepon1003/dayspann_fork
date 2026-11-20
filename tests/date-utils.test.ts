@@ -488,6 +488,12 @@ test("TaskChuteのカードは「今日やる」を出し、今日の一覧に�
   );
   assert.equal(createTranslator("ja")("action.inTodayLabel"), "今日の一覧に入っています");
   assert.equal(createTranslator("ja")("action.todayLabel"), "TaskChuteの今日の一覧に入れる");
+  assert.equal(createTranslator("ja")("action.todayShort"), "今日やる");
+  assert.equal(createTranslator("ja")("action.inTodayShort"), "今日の一覧");
+  assert.equal(createTranslator("en")("action.todayShort"), "Do today");
+  assert.equal(createTranslator("en")("action.inTodayShort"), "In today's list");
+  assert.equal(createTranslator("ja")("action.completeShort"), "完了");
+  assert.equal(createTranslator("en")("action.completeShort"), "Done");
 });
 
 test("TaskChuteでないカードは✓と「…」だけ、期日がなければ先送りはメニューに出さない", () => {

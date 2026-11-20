@@ -976,6 +976,7 @@ export class DayspannView extends ItemView {
     const todayKey = this.plugin.todayKey();
     const locale = this.plugin.locale();
     const pill = buildDuePill(record, todayKey, this.plugin.settings.soonDays);
+    const plan = planCardActions(record, todayKey);
 
     const content = card.createDiv("dayspann-card-content");
     const head = content.createDiv("dayspann-project-head");
@@ -983,56 +984,7 @@ export class DayspannView extends ItemView {
     headText.createEl("h3", { text: title });
     const headActions = head.createDiv("dayspann-project-head-actions");
     this.renderDuePill(headActions, pill, locale);
-
-    if (record.goal) {
-      const goal = content.createDiv({ cls: "dayspann-card-goal" });
-      setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
-      goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
-      setTooltip(goal, record.goal);
-    }
-
-    // 完了していないカードは、タイトルの「｜」より後ろを「次の一手」として出す。
-    const nextAction = record.archived ? "" : splitTitle(record.title).nextAction;
-    const actionRow = content.createDiv(nextAction ? "dayspann-card-next-row" : "dayspann-project-action-row");
-    if (nextAction) {
-      const next = actionRow.createDiv({ cls: "dayspann-card-next" });
-      const icon = next.createSpan("dayspann-card-next-icon");
-      setIcon(icon, "arrow-right");
-      icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
-      next.createSpan({ text: nextAction, cls: "dayspann-card-next-text" });
-      next.setAttribute("title", nextAction);
-      setTooltip(next, nextAction);
-    }
-    const excerpt = excerptForCard(record.excerpt);
-    if (excerpt) {
-      content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
-    }
-
-    // 次の一手があるときはその右端に、ないときは右寄せの専用行に、☀ ✓ … を並べる。
-    const plan = planCardActions(record, todayKey);
-    const stalled = record.archived || record.completed
-      ? null
-      : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
-    const actions = actionRow.createDiv("dayspann-card-actions dayspann-project-line-actions");
-    if (stalled !== null) {
-      const mark = actions.createDiv("dayspann-stalled");
-      setIcon(mark, "hourglass");
-      const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
-      setTooltip(mark, tooltip);
-      mark.setAttribute("aria-label", tooltip);
-    }
-    if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
-    if (plan.complete) {
-      this.iconButton(
-        actions,
-        "check",
-        this.plugin.t(plan.overdueActions ? "action.completeOverdue" : "action.complete"),
-        () => {
-          void this.plugin.setRecordArchived(record, true);
-        }
-      );
-    }
-    const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
+    const more = this.iconButton(headActions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
     more.addEventListener("click", (event) => {
       event.stopPropagation();
       const menu = new Menu();
@@ -1069,6 +1021,55 @@ export class DayspannView extends ItemView {
       const mouse = event as MouseEvent;
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
+
+    if (record.goal) {
+      const goal = content.createDiv({ cls: "dayspann-card-goal" });
+      setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
+      goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
+      setTooltip(goal, record.goal);
+    }
+
+    // 完了していないカードは、タイトルの「｜」より後ろを「次の一手」として出す。全文を折り返して出す（切らない）。
+    const nextAction = record.archived ? "" : splitTitle(record.title).nextAction;
+    const stalled = record.archived || record.completed
+      ? null
+      : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
+    const hasLineActions = plan.today !== "none" || plan.complete || stalled !== null;
+    if (nextAction) {
+      const next = content.createDiv({ cls: "dayspann-card-next" });
+      const icon = next.createSpan("dayspann-card-next-icon");
+      setIcon(icon, "arrow-right");
+      icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
+      next.createSpan({ text: nextAction, cls: "dayspann-card-next-text" });
+      next.setAttribute("title", nextAction);
+      setTooltip(next, nextAction);
+    }
+    const excerpt = excerptForCard(record.excerpt);
+    if (excerpt) {
+      content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
+    }
+
+    // 「今日やる」「完了」は本文の下、カード右下の右寄せ行に出す。本文を切らない。「…」は名前の右。
+    if (hasLineActions) {
+      const actions = content.createDiv("dayspann-card-actions dayspann-project-line-actions dayspann-project-action-row");
+      if (stalled !== null) {
+        const mark = actions.createDiv("dayspann-stalled");
+        setIcon(mark, "hourglass");
+        const tooltip = this.plugin.t("stalled.tooltip", { days: stalled });
+        setTooltip(mark, tooltip);
+        mark.setAttribute("aria-label", tooltip);
+      }
+      if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
+      if (plan.complete) {
+        this.completeButton(
+          actions,
+          this.plugin.t(plan.overdueActions ? "action.completeOverdue" : "action.complete"),
+          () => {
+            void this.plugin.setRecordArchived(record, true);
+          }
+        );
+      }
+    }
   }
 
   /** 期日超過の「延期する」。今日から、明日・1週間後・1か月後・日付を選ぶ、を出す。 */
@@ -1148,19 +1149,37 @@ export class DayspannView extends ItemView {
       : this.plugin.t("view.done");
   }
 
-  /** 「今日やる」ボタン。今日の一覧に入っているときは枠だけの「入っています」の形にする。 */
+  /** 「今日やる」の文字ピル。今日の一覧に入っているときは「今日の一覧 ✓」にして、アクセント色のままにする。ツールチップはこれまでと同じ。 */
   private todayButton(parent: HTMLElement, record: DayspannRecord, inToday: boolean): HTMLButtonElement {
-    const label = this.plugin.t(inToday ? "action.inTodayLabel" : "action.todayLabel");
+    const tooltip = this.plugin.t(inToday ? "action.inTodayLabel" : "action.todayLabel");
     const button = parent.createEl("button", {
       cls: "dayspann-today-button" + (inToday ? " dayspann-today-button--done" : ""),
-      attr: { type: "button", "aria-label": label },
+      attr: { type: "button", "aria-label": tooltip },
     });
-    setIcon(button.createSpan("dayspann-today-icon"), "sun");
     if (inToday) setIcon(button.createSpan("dayspann-today-check"), "check");
-    setTooltip(button, label);
+    button.createSpan({
+      text: this.plugin.t(inToday ? "action.inTodayShort" : "action.todayShort"),
+      cls: "dayspann-today-label",
+    });
+    setTooltip(button, tooltip);
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.plugin.addRecordToTaskChuteToday(record);
+    });
+    return button;
+  }
+
+  /** 「完了」の文字ピル。見た目の文字は短く「完了」、ツールチップは「完了にする」「完了する」。 */
+  private completeButton(parent: HTMLElement, tooltip: string, onClick: () => void): HTMLButtonElement {
+    const button = parent.createEl("button", {
+      cls: "dayspann-complete-button",
+      attr: { type: "button", "aria-label": tooltip },
+    });
+    button.createSpan({ text: this.plugin.t("action.completeShort"), cls: "dayspann-complete-label" });
+    setTooltip(button, tooltip);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      onClick();
     });
     return button;
   }

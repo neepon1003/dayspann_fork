@@ -281,10 +281,10 @@
   font-size: var(--font-ui-small);
 }
 
-/* 完了条件（goal）：日付の下に小さく 1 行。長いときは「…」で切る */
+/* 完了条件（goal）：日付の下に小さく出す。長いときは全文を折り返す（切らない）。 */
 .dayspann-card-goal {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   min-width: 0;
   margin-top: 3px;
@@ -306,15 +306,15 @@
 
 .dayspann-card-goal-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-/* 次の一手：完了条件の下に小さく 1 行。長いときは「…」で切る */
+/* 次の一手：完了条件の下に小さく出す。長いときは全文を折り返す（切らない）。 */
 .dayspann-card-next {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   min-width: 0;
   margin-top: 3px;
@@ -336,9 +336,9 @@
 
 .dayspann-card-next-text {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .dayspann-card-excerpt {
@@ -491,27 +491,32 @@
   color: var(--text-muted);
 }
 
-/* 「今日やる」は塗りなしの 30px アイコン。今日の一覧に入っているときだけアクセント色。
+/* 「今日やる」「完了」は、習慣の「✓ 今日やった」に近い小さな文字ピル（高さ約 26px）。縮めない。
    Obsidian の `button:not(.clickable-icon)` と、スマホの `.is-mobile button:not(.clickable-icon)` が
-   背景を暗い色で塗らないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
+   背景を `--interactive-normal`（暗い色）で上書きしないよう、こちらも button と :not(.clickable-icon) を付けて勝つ。 */
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon),
 .dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon) {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  flex: 0 0 auto;
   box-sizing: border-box;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  background-color: transparent;
+  height: 26px;
+  min-height: 26px;
+  width: auto;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 999px;
+  background: var(--interactive-accent);
+  background-color: var(--interactive-accent);
   box-shadow: none;
-  color: var(--text-muted);
+  color: var(--text-on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
@@ -519,9 +524,10 @@
 
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon):hover,
 .dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon):hover {
-  background: transparent;
-  background-color: transparent;
-  color: var(--text-normal);
+  background: var(--interactive-accent-hover, var(--interactive-accent));
+  background-color: var(--interactive-accent-hover, var(--interactive-accent));
+  border-color: var(--interactive-accent-hover, var(--interactive-accent));
+  color: var(--text-on-accent);
 }
 
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon):focus-visible,
@@ -530,31 +536,68 @@
   outline-offset: 2px;
 }
 
-.dayspann-today-icon,
 .dayspann-today-check {
   display: inline-flex;
+  color: inherit;
 }
 
-.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon) .dayspann-today-icon svg,
-.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon) .dayspann-today-icon svg {
-  width: 16px;
-  height: 16px;
+.dayspann-today-check svg {
+  width: 12px;
+  height: 12px;
 }
 
-/* 今日の一覧に入っているときは、塗りなしのままアクセント色にする。右下の小さな✓は出さない。 */
+/* 今日の一覧に入っているときは、チェックと「今日の一覧」を出す。塗りはアクセント色のまま。 */
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done,
 .dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover,
 .dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done,
 .dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--done:hover {
-  border: 0;
-  background: transparent;
-  background-color: transparent;
-  color: var(--interactive-accent);
+  padding: 0 8px;
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
-.dayspann-view .dayspann-project-line-actions .dayspann-today-check,
-.dayspann-view .dayspann-card-actions .dayspann-today-check {
-  display: none;
+/* 「完了」は控えめな枠だけのピル。 */
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon),
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 26px;
+  min-height: 26px;
+  width: auto;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, var(--background-modifier-border));
+  border-radius: 999px;
+  background: transparent;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):hover,
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):hover {
+  border-color: var(--text-muted);
+  background: transparent;
+  background-color: transparent;
+  color: var(--text-normal);
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible,
+.dayspann-view .dayspann-card-actions button.dayspann-complete-button:not(.clickable-icon):focus-visible {
+  outline: 2px solid var(--text-muted);
+  outline-offset: 2px;
 }
 
 .dayspann-empty {
@@ -1069,6 +1112,20 @@
   max-width: none;
 }
 
+.dayspann-project-head-actions .dayspann-icon-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.dayspann-project-head-actions .dayspann-icon-button:hover {
+  color: var(--text-normal);
+}
+
 /* 残日数ピル。7日以内（設定の「期日が近い」）と今日はオレンジ、それ以外は緑、超過は赤、期日なし・完了は控えめ。 */
 .dayspann-due-pill {
   display: inline-flex;
@@ -1107,20 +1164,18 @@
   font-weight: 600;
 }
 
-.dayspann-card-next-row,
+/* 「今日やる」「完了」は本文の下、カード右下の右寄せ行。本文と横並びにして切らない。 */
 .dayspann-project-action-row {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   min-width: 0;
   max-width: 100%;
-  margin-top: 3px;
-}
-
-.dayspann-card-next-row .dayspann-card-next {
-  flex: 1 1 0;
-  min-width: 0;
-  margin-top: 0;
+  margin-top: 6px;
+  /* カード右端の padding に加えて、ピルが端に付かないように少し空ける。 */
+  padding-right: 4px;
+  box-sizing: border-box;
 }
 
 .dayspann-project-line-actions {
@@ -1129,7 +1184,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
 }
 
