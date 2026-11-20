@@ -30,6 +30,7 @@ import {
 } from "./habit-log";
 import { findPjSpanEntries } from "./habit-record";
 import { countInTodayProgress, countProjectSummary, partitionProjectGroups, shouldShowInTodaySection, type InTodayProgress } from "./project-groups";
+import { cardFlipKey, collectFlipRects, FLIP_KEY_ATTR, playFlipTransition, prefersReducedMotion, sectionFlipKey } from "./smooth-refresh";
 import {
   habitTargetProgress,
   HabitTargetProgress,
@@ -94,14 +95,62 @@ export class DayspannView extends ItemView {
 
   async refresh(): Promise<void> {
     const refreshVersion = ++this.refreshVersion;
-    const root = this.containerEl.children[1] as HTMLElement;
-    root.empty();
+    // 先にデータを読み、できてから一度に差し替える（空の画面を出さない）。
+    const tab = this.plugin.settings.activeTab;
+    const records = (await this.plugin.loadRecords()).filter((record) => record.type === tab);
+    if (refreshVersion !== this.refreshVersion) return;
+
+    const today = this.plugin.todayKey();
+    let habitLogs: HabitLogDays | undefined;
+    if (tab === "habit") {
+      habitLogs = await this.plugin.loadTaskChuteLogs(await this.plugin.listTaskChuteLogMonths(today));
+      if (refreshVersion !== this.refreshVersion) return;
+    }
+
+    const root = this.viewRoot();
+    const scrollTop = root.scrollTop;
+    const scrollLeft = root.scrollLeft;
+    const reducedMotion = prefersReducedMotion(root.ownerDocument.defaultView?.matchMedia("(prefers-reduced-motion: reduce)"));
+    const first = reducedMotion ? new Map() : collectFlipRects(root);
+
+    // いまの画面には足さず、外で組み立てる（空の瞬間を出さない）。
+    const next = createDiv();
+    this.renderView(next, tab, records, today, habitLogs);
+    if (refreshVersion !== this.refreshVersion) return;
+
     root.addClass("dayspann-view");
     root.setCssProps({
       "--dayspann-future-color": this.plugin.settings.futureColor,
       "--dayspann-past-color": this.plugin.settings.pastColor,
     });
+    root.replaceChildren(...Array.from(next.childNodes));
+    root.scrollTop = scrollTop;
+    root.scrollLeft = scrollLeft;
+    playFlipTransition(root, first, { reducedMotion });
+  }
 
+  /**
+   * 一覧の箱。Obsidian の ItemView では containerEl の 2 つ目の子（.view-content）がスクロールする。
+   * contentEl と同じことが多い。
+   */
+  private viewRoot(): HTMLElement {
+    const fromChildren = this.containerEl.children[1];
+    if (fromChildren instanceof HTMLElement) return fromChildren;
+    return this.contentEl;
+  }
+
+  private setFlipKey(element: HTMLElement, key: string): void {
+    element.setAttribute(FLIP_KEY_ATTR, key);
+  }
+
+  /** ヘッダー・タブ・カードを、渡した箱に組み立てる（まだ画面には出さない）。 */
+  private renderView(
+    root: HTMLElement,
+    tab: RecordType,
+    records: DayspannRecord[],
+    today: string,
+    habitLogs?: HabitLogDays
+  ): void {
     const header = root.createDiv("dayspann-header");
     const heading = header.createDiv("dayspann-heading");
     heading.createEl("h2", { text: "PJ-span" });
@@ -117,16 +166,9 @@ export class DayspannView extends ItemView {
     );
 
     // 上のタブで選んでいる種類（プロジェクト・習慣）の記録だけを出す。
-    const tab = this.plugin.settings.activeTab;
     this.renderTabs(root, tab);
-    const records = (await this.plugin.loadRecords()).filter((record) => record.type === tab);
-    if (refreshVersion !== this.refreshVersion) return;
-
-    const today = this.plugin.todayKey();
     if (tab === "habit") {
-      const logs = await this.plugin.loadTaskChuteLogs(await this.plugin.listTaskChuteLogMonths(today));
-      if (refreshVersion !== this.refreshVersion) return;
-      this.renderHabits(root, heading, records, today, logs);
+      this.renderHabits(root, heading, records, today, habitLogs ?? {});
       return;
     }
     const counted = records.map((record) => ({
@@ -377,6 +419,7 @@ export class DayspannView extends ItemView {
         ),
       },
     });
+    this.setFlipKey(heading, sectionFlipKey(`habit:${groupKey}`));
     setIcon(heading.createSpan("dayspann-section-icon"), icon);
     heading.createSpan({
       text: this.plugin.t("section.heading", { title, count: records.length }),
@@ -407,6 +450,7 @@ export class DayspannView extends ItemView {
   /** 習慣のカード。頭文字の四角は出さず、名前の右上に「…」、ヒートマップの右に数字を並べる。名前の右に、今の期間の日数を出す。 */
   private renderHabitCard(list: HTMLElement, record: DayspannRecord, logs?: HabitLogDays): void {
     const card = list.createDiv("dayspann-card dayspann-card--habit");
+    this.setFlipKey(card, cardFlipKey(record.file.path));
     if (record.archived) card.addClass("dayspann-card--done");
     card.tabIndex = 0;
     card.setAttribute("role", "button");
@@ -744,6 +788,7 @@ export class DayspannView extends ItemView {
         ),
       },
     });
+    this.setFlipKey(heading, sectionFlipKey("archive"));
     setIcon(heading.createSpan("dayspann-section-icon"), "archive");
     heading.createSpan({
       text: this.plugin.t("section.heading", { title, count: items.length }),
@@ -808,6 +853,7 @@ export class DayspannView extends ItemView {
         ),
       },
     });
+    this.setFlipKey(heading, sectionFlipKey(`archive-month:${groupKey || "unknown"}`));
     heading.createSpan({ text: title });
     heading.createSpan("dayspann-section-line");
     setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
@@ -870,6 +916,7 @@ export class DayspannView extends ItemView {
         ),
       },
     });
+    this.setFlipKey(heading, sectionFlipKey(kind));
     setIcon(heading.createSpan("dayspann-section-icon"), icon);
     if (kind === "inToday" && inTodayProgress) {
       const label = heading.createSpan("dayspann-section-label");
@@ -923,6 +970,7 @@ export class DayspannView extends ItemView {
       return;
     }
     const card = list.createDiv("dayspann-card");
+    this.setFlipKey(card, cardFlipKey(record.file.path));
     // 完了していない記録で、期日が今日から設定の日数後までなら「期日が近い」としてオレンジ色にする。
     const dueSoon = record.archived || record.completed
       ? null

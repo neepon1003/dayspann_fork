@@ -134,6 +134,7 @@ import {
   prepareHabitMemoInput,
 } from "./src/habit-memo";
 import { displayTitle } from "./src/note-template";
+import { RefreshCoalescer } from "./src/refresh-coalesce";
 import { DAYSPANN_VIEW_TYPE, DayspannView } from "./src/view";
 
 export interface DayspannSettings {
@@ -180,7 +181,15 @@ const DEFAULT_SETTINGS: DayspannSettings = {
 
 export default class DayspannPlugin extends Plugin {
   settings: DayspannSettings = DEFAULT_SETTINGS;
-  private refreshTimer?: number;
+  /** 画面の読み直しをまとめる（自分の書き込みの直後の二重描画を避ける）。 */
+  private refreshCoalescer = new RefreshCoalescer(
+    () => this.refreshViewsNow(),
+    {
+      now: () => Date.now(),
+      setTimeout: (callback, ms) => window.setTimeout(() => void callback(), ms),
+      clearTimeout: (id) => window.clearTimeout(id),
+    }
+  );
   /** 「今日やった」「取り消す」を書いている途中の習慣（ノートの場所）。続けて押しても 2 回書かないようにする。 */
   private habitLogWrites = new Set<string>();
 
@@ -241,7 +250,7 @@ export default class DayspannPlugin extends Plugin {
   }
 
   onunload(): void {
-    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
+    this.refreshCoalescer.dispose();
   }
 
   todayKey(): string {
@@ -368,7 +377,7 @@ export default class DayspannPlugin extends Plugin {
           (frontmatter: Record<string, unknown>) => applyDraftToFrontmatter(frontmatter, draft)
         );
         new Notice(this.t("notice.updated"));
-        await this.refreshViews();
+        await this.refreshViewsAfterWrite(record.file.path);
       }
     ).open();
   }
@@ -378,7 +387,7 @@ export default class DayspannPlugin extends Plugin {
     if (!confirmed) return;
     await this.app.fileManager.trashFile(record.file);
     new Notice(this.t("notice.trashed"));
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
   }
 
   async setRecordArchived(record: DayspannRecord, archived: boolean): Promise<void> {
@@ -406,7 +415,7 @@ export default class DayspannPlugin extends Plugin {
       }
     );
     new Notice(this.t(archived ? "notice.archived" : "notice.restored"));
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
   }
 
   async postponeRecord(record: DayspannRecord, days: number): Promise<void> {
@@ -422,7 +431,7 @@ export default class DayspannPlugin extends Plugin {
     );
     if (!nextDate) return;
     new Notice(this.t("notice.postponed", { date: formatLocalizedDate(nextDate, this.locale()) }));
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
   }
 
   /** 期日（frontmatter の date）だけを書き換える。今日より前の日付は受け付けない。 */
@@ -439,7 +448,7 @@ export default class DayspannPlugin extends Plugin {
       }
     );
     new Notice(this.t("notice.postponed", { date: formatLocalizedDate(dateKey, this.locale()) }));
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
   }
 
   async addRecordToTaskChuteToday(record: DayspannRecord): Promise<void> {
@@ -455,12 +464,12 @@ export default class DayspannPlugin extends Plugin {
     );
     if (!changed) {
       new Notice(this.t("notice.alreadyToday", { title: record.title }));
-      await this.refreshViews();
+      await this.refreshViewsAfterWrite(record.file.path);
       return;
     }
 
     new Notice(this.t("notice.addedToday", { title: record.title }));
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
     await this.reloadTaskChuteView(record.file, today);
   }
 
@@ -654,7 +663,7 @@ export default class DayspannPlugin extends Plugin {
       const logs = await this.loadTaskChuteLogs([today.slice(0, 7)]);
       if (isHabitDoneOn(logs, habit, today)) {
         new Notice(this.t("notice.habitAlreadyLogged", { title: record.title }));
-        await this.refreshViews();
+        await this.refreshViewsAfterWrite(record.file.path);
         return;
       }
       const title = resolveTaskChuteTitle(
@@ -666,7 +675,7 @@ export default class DayspannPlugin extends Plugin {
       );
       new Notice(this.t("notice.habitLogged", { title: record.title }));
       recordedDate = today;
-      await this.refreshViews();
+      await this.refreshViewsAfterWrite(record.file.path);
       this.reloadTaskChuteViewNow();
     } catch (error) {
       console.error("[PJ-span] 今日の分を記録できませんでした", error);
@@ -742,7 +751,7 @@ export default class DayspannPlugin extends Plugin {
       console.error("[PJ-span] メモと次回を書けませんでした", error);
       new Notice(this.t("notice.habitMemoFailed"));
     }
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(file.path);
   }
 
   /** 日次ログ（設定のフォルダの YYYY-MM-DD.md）の末尾に「- 時刻 [[習慣]] メモ」を足す。無ければ作る。 */
@@ -797,7 +806,7 @@ export default class DayspannPlugin extends Plugin {
       }
     }
     // 次の一手やメモが変わっていれば出し直す（ノートの変更でも読み直すが、念のため）。
-    await this.refreshViews();
+    await this.refreshViewsAfterWrite(record.file.path);
   }
 
   /**
@@ -848,14 +857,14 @@ export default class DayspannPlugin extends Plugin {
       const entries = findPjSpanEntries(logs, habit, today);
       if (!entries.length) {
         new Notice(this.t("notice.habitUndoNothing"));
-        await this.refreshViews();
+        await this.refreshViewsAfterWrite(record.file.path);
         return;
       }
       for (const entry of entries) {
         await this.appendTaskChuteDelta(buildHabitUndoDelta(entry, today, deviceId, now));
       }
       new Notice(this.t("notice.habitUndone", { title: record.title }));
-      await this.refreshViews();
+      await this.refreshViewsAfterWrite(record.file.path);
       this.reloadTaskChuteViewNow();
     } catch (error) {
       console.error("[PJ-span] 今日の記録を取り消せませんでした", error);
@@ -913,6 +922,7 @@ export default class DayspannPlugin extends Plugin {
     } else {
       await adapter.write(path, deltaLineToAppend("", record));
     }
+    this.refreshCoalescer.noteOwnWrites([path]);
   }
 
   /** TaskChute の画面が開いているときだけ、「今日のタスクを表示」で読み直す（TaskChute がログをまとめ直す）。 */
@@ -923,6 +933,16 @@ export default class DayspannPlugin extends Plugin {
   }
 
   async refreshViews(): Promise<void> {
+    await this.refreshCoalescer.requestImmediate();
+  }
+
+  /** 書き込んだファイルのパスを覚え、その変更イベントによるすぐあとの読み直しを無視する。 */
+  private async refreshViewsAfterWrite(...paths: string[]): Promise<void> {
+    this.refreshCoalescer.noteOwnWrites(paths);
+    await this.refreshViews();
+  }
+
+  private async refreshViewsNow(): Promise<void> {
     for (const leaf of this.app.workspace.getLeavesOfType(DAYSPANN_VIEW_TYPE)) {
       if (leaf.view instanceof DayspannView) await leaf.view.refresh();
     }
@@ -1181,7 +1201,9 @@ export default class DayspannPlugin extends Plugin {
       path = `${folder}/${base} ${index}.md`;
       index += 1;
     }
-    return this.app.vault.create(path, serializeRecord(draft, taskchute));
+    const file = await this.app.vault.create(path, serializeRecord(draft, taskchute));
+    this.refreshCoalescer.noteOwnWrites([file.path]);
+    return file;
   }
 
   private async ensureFolder(folder: string): Promise<void> {
@@ -1205,8 +1227,9 @@ export default class DayspannPlugin extends Plugin {
   }
 
   private scheduleRefreshForPaths(...paths: string[]): void {
-    if (!paths.some((path) => this.isStoragePath(path) || this.isTaskChuteLogPath(path))) return;
-    this.scheduleRefresh();
+    const relevant = paths.filter((path) => this.isStoragePath(path) || this.isTaskChuteLogPath(path));
+    if (!relevant.length) return;
+    this.scheduleRefresh(relevant);
   }
 
   private isStoragePath(path: string): boolean {
@@ -1221,10 +1244,9 @@ export default class DayspannPlugin extends Plugin {
     return path.startsWith(`${folder}/`) && (path.endsWith("-tasks.json") || path.endsWith(".jsonl"));
   }
 
-  private scheduleRefresh(): void {
+  private scheduleRefresh(paths: string[]): void {
     if (!this.app.workspace.getLeavesOfType(DAYSPANN_VIEW_TYPE).length) return;
-    if (this.refreshTimer) window.clearTimeout(this.refreshTimer);
-    this.refreshTimer = window.setTimeout(() => void this.refreshViews(), 150);
+    this.refreshCoalescer.requestScheduled(paths);
   }
 }
 

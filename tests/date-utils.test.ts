@@ -80,6 +80,7 @@ import {
 } from "../src/source-link";
 import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
+import "./smooth-refresh.test";
 import { buildDuePill } from "../src/due-pill";
 import { countCompletedToday, countInTodayProgress, countProjectSummary, isInTodayList, partitionProjectGroups, shouldShowInTodaySection } from "../src/project-groups";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
