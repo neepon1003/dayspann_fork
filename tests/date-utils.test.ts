@@ -81,7 +81,7 @@ import {
 import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import { buildDuePill } from "../src/due-pill";
-import { countProjectSummary, isInTodayList, partitionProjectGroups } from "../src/project-groups";
+import { countCompletedToday, countInTodayProgress, countProjectSummary, isInTodayList, partitionProjectGroups, shouldShowInTodaySection } from "../src/project-groups";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
@@ -345,6 +345,28 @@ test("日本語と英語の表示文言を切り替える", () => {
   assert.equal(createTranslator("en")("section.inToday"), "Do today");
   assert.equal(createTranslator("ja")("section.heading", { title: "今日やる", count: 1 }), "今日やる（1）");
   assert.equal(createTranslator("en")("section.heading", { title: "Do today", count: 1 }), "Do today (1)");
+  assert.equal(
+    createTranslator("ja")("section.inTodayProgress", { remaining: 1, done: 0 }),
+    "残り1／完了0"
+  );
+  assert.equal(
+    createTranslator("en")("section.inTodayProgress", { remaining: 1, done: 0 }),
+    "1 left / 0 done"
+  );
+  assert.equal(createTranslator("ja")("section.inTodayAllDone"), "すべて完了 ✓");
+  assert.equal(createTranslator("en")("section.inTodayAllDone"), "All done ✓");
+  assert.equal(
+    createTranslator("ja")("view.goalTooltip", { goal: "支払漏れがないようにする" }),
+    "完了条件：支払漏れがないようにする"
+  );
+  assert.equal(
+    createTranslator("en")("view.goalTooltip", { goal: "Pay without missing a bill" }),
+    "Completion condition: Pay without missing a bill"
+  );
+  assert.equal(createTranslator("ja")("action.viewGoal"), "完了条件を見る");
+  assert.equal(createTranslator("en")("action.viewGoal"), "View completion condition");
+  assert.equal(createTranslator("ja")("action.close"), "閉じる");
+  assert.equal(createTranslator("en")("action.close"), "Close");
   assert.equal(createTranslator("ja")("section.future"), "期日まで");
   assert.equal(createTranslator("en")("section.future"), "Days remaining");
   assert.equal(
@@ -2578,4 +2600,44 @@ test("「今日やる」の並びは、超過、今日、これから、期日�
     undated: [],
     archived: [],
   });
+});
+
+test("今日やるの完了件数は、今日完了したプロジェクト全部を数える", () => {
+  const today = "2026-11-20";
+  const remaining = {
+    title: "今日やる残り",
+    date: "2026-11-27",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const doneFromTodayList = {
+    title: "今日の一覧から完了",
+    date: "2026-11-27",
+    archived: true,
+    completed: today,
+    taskchute: { targetDate: today },
+  };
+  const doneFromDueList = {
+    title: "期日順から完了",
+    date: "2026-11-21",
+    archived: true,
+    completed: today,
+  };
+  const doneYesterday = {
+    title: "昨日完了",
+    date: "2026-11-10",
+    archived: true,
+    completed: "2026-11-19",
+  };
+  const stillOpen = { title: "未完了", date: "2026-11-21", archived: false };
+  const records = [remaining, doneFromTodayList, doneFromDueList, doneYesterday, stillOpen];
+
+  assert.equal(countCompletedToday(records, today), 2);
+  assert.deepEqual(countInTodayProgress(records, today), { remaining: 1, doneToday: 2 });
+  assert.equal(shouldShowInTodaySection({ remaining: 1, doneToday: 2 }), true);
+  assert.equal(shouldShowInTodaySection({ remaining: 0, doneToday: 2 }), true);
+  assert.equal(shouldShowInTodaySection({ remaining: 1, doneToday: 0 }), true);
+  assert.equal(shouldShowInTodaySection({ remaining: 0, doneToday: 0 }), false);
+  assert.deepEqual(countInTodayProgress([], today), { remaining: 0, doneToday: 0 });
+  assert.equal(shouldShowInTodaySection(countInTodayProgress([], today)), false);
 });

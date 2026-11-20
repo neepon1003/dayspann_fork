@@ -205,6 +205,21 @@
   height: 16px;
 }
 
+/* 「今日やる」見出しの進捗（残りN／完了M、またはすべて完了）。 */
+.dayspann-section-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5em;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.dayspann-section-progress {
+  color: color-mix(in srgb, var(--dayspann-accent) 68%, var(--text-muted));
+  font-weight: 600;
+}
+
 .dayspann-section--collapsed {
   margin-bottom: 20px;
 }

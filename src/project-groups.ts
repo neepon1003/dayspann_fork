@@ -31,6 +31,36 @@ export function isInTodayList(record: ProjectGroupRecord, todayKey: string): boo
 }
 
 /**
+ * 今日完了したプロジェクトの件数。今日の一覧に入っていたかどうかは問わない。
+ * 完了日は、読み込み時に resolveCompletedDate で決めた record.completed を使う。
+ */
+export function countCompletedToday(records: ProjectGroupRecord[], todayKey: string): number {
+  let count = 0;
+  for (const record of records) {
+    if (record.archived && record.completed === todayKey) count += 1;
+  }
+  return count;
+}
+
+export interface InTodayProgress {
+  remaining: number;
+  doneToday: number;
+}
+
+/** 「今日やる」見出し用。残りは今日の一覧、完了は今日完了したプロジェクト全部。 */
+export function countInTodayProgress(records: ProjectGroupRecord[], todayKey: string): InTodayProgress {
+  return {
+    remaining: records.filter((record) => isInTodayList(record, todayKey)).length,
+    doneToday: countCompletedToday(records, todayKey),
+  };
+}
+
+/** 残りも今日の完了も 0 のときだけ、「今日やる」見出しを出さない。 */
+export function shouldShowInTodaySection(progress: InTodayProgress): boolean {
+  return progress.remaining > 0 || progress.doneToday > 0;
+}
+
+/**
  * 一覧の上の件数。どの見出しに出しているかとは別に数える。
  * 今週締切は、完了していない・期日あり・今日から週の終わり（土曜）まで。超過と期日なしは含めない。
  */
@@ -60,7 +90,7 @@ export function countProjectSummary(records: ProjectGroupRecord[], todayKey: str
 export function compareProjectByDue(left: ProjectGroupRecord, right: ProjectGroupRecord, todayKey: string): number {
   const leftDated = Boolean(parseDateKey(left.date));
   const rightDated = Boolean(parseDateKey(right.date));
-  if (!leftDated && !rightDated) return left.title.localeCompare(right.title, "en");
+  if (!leftDated && !rightDated) return left.title.localeCompare(right.title);
   if (!leftDated) return 1;
   if (!rightDated) return -1;
   return (
@@ -69,7 +99,7 @@ export function compareProjectByDue(left: ProjectGroupRecord, right: ProjectGrou
       left.date,
       differenceInCalendarDays(right.date, todayKey),
       right.date
-    ) || left.title.localeCompare(right.title, "en")
+    ) || left.title.localeCompare(right.title)
   );
 }
 
@@ -106,7 +136,7 @@ export function partitionProjectGroups<T extends ProjectGroupRecord>(
   }
   inToday.sort((left, right) => compareProjectByDue(left, right, todayKey));
   dated.sort((left, right) => compareProjectByDue(left, right, todayKey));
-  undated.sort((left, right) => left.title.localeCompare(right.title, "en"));
+  undated.sort((left, right) => left.title.localeCompare(right.title));
   archived.sort((left, right) =>
     compareArchiveOrder(left.completed, right.completed, left.date, right.date)
   );

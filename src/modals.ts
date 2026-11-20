@@ -127,6 +127,39 @@ class GoalCompleteModal extends Modal {
 }
 
 /**
+ * 完了条件を読むだけの窓。閉じるだけ。完了するときの確認（confirmGoalComplete）とは別。
+ */
+export function showGoal(app: App, goal: string, t: Translator): void {
+  new ViewGoalModal(app, goal, t).open();
+}
+
+class ViewGoalModal extends Modal {
+  constructor(
+    app: App,
+    private goal: string,
+    private t: Translator
+  ) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.t("modal.goal"));
+    contentEl.createEl("p", { text: this.goal });
+
+    const actions = contentEl.createDiv({ cls: "modal-button-container" });
+    const close = actions.createEl("button", { text: this.t("action.close"), cls: "mod-cta" });
+    close.addEventListener("click", () => this.close());
+    window.setTimeout(() => close.focus(), 30);
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+/**
  * 新しく登録するとき、完了条件や期日が空なら確かめる。「このまま登録する」なら true、「戻って入力する」や閉じたときは false。
  */
 export function confirmEmptyFields(app: App, fields: EmptyRequiredField[], t: Translator): Promise<boolean> {

@@ -29,7 +29,7 @@ import {
   sundayWeekNumber,
 } from "./habit-log";
 import { findPjSpanEntries } from "./habit-record";
-import { countProjectSummary, partitionProjectGroups } from "./project-groups";
+import { countInTodayProgress, countProjectSummary, partitionProjectGroups, shouldShowInTodaySection, type InTodayProgress } from "./project-groups";
 import {
   habitTargetProgress,
   HabitTargetProgress,
@@ -41,7 +41,7 @@ import {
   weekStreakTarget,
 } from "./habit-target";
 import { formatCountUnit, formatDueOverdue, formatDueRemaining } from "./i18n";
-import { choosePostponeDate } from "./modals";
+import { choosePostponeDate, showGoal } from "./modals";
 import { DayspannRecord } from "./model";
 import { displayTitle, excerptForCard, habitNextAction, splitTitle } from "./note-template";
 import { RECORD_TYPES, RecordType } from "./record-type";
@@ -166,6 +166,7 @@ export class DayspannView extends ItemView {
 
     // 今日の一覧に入っているカードは「今日やる」へ。期日順・期日なしには出さない。完了はアーカイブへ。
     const groups = partitionProjectGroups(records, today);
+    const inTodayProgress = countInTodayProgress(records, today);
     const toCounted = (list: typeof records): CountedRecord[] =>
       list.map((record) => ({
         record,
@@ -177,7 +178,8 @@ export class DayspannView extends ItemView {
       "sun",
       this.plugin.t("section.inToday"),
       "inToday",
-      toCounted(groups.inToday)
+      toCounted(groups.inToday),
+      inTodayProgress
     );
 
     this.renderSection(
@@ -835,9 +837,15 @@ export class DayspannView extends ItemView {
     icon: string,
     title: string,
     kind: ViewSectionKind,
-    items: CountedRecord[]
+    items: CountedRecord[],
+    inTodayProgress?: InTodayProgress
   ): void {
-    if (!items.length) return;
+    // 「今日やる」は、残りも今日の完了も 0 のときだけ出さない。全部終わった日は見出しを残す。
+    if (kind === "inToday") {
+      if (!inTodayProgress || !shouldShowInTodaySection(inTodayProgress)) return;
+    } else if (!items.length) {
+      return;
+    }
     const section = root.createEl("section", {
       cls: `dayspann-section dayspann-section--${kind}`,
     });
@@ -863,9 +871,22 @@ export class DayspannView extends ItemView {
       },
     });
     setIcon(heading.createSpan("dayspann-section-icon"), icon);
-    heading.createSpan({
-      text: this.plugin.t("section.heading", { title, count: items.length }),
-    });
+    if (kind === "inToday" && inTodayProgress) {
+      const label = heading.createSpan("dayspann-section-label");
+      label.createSpan({ text: title, cls: "dayspann-section-title" });
+      const progressText =
+        inTodayProgress.remaining === 0
+          ? this.plugin.t("section.inTodayAllDone")
+          : this.plugin.t("section.inTodayProgress", {
+              remaining: inTodayProgress.remaining,
+              done: inTodayProgress.doneToday,
+            });
+      label.createSpan({ text: progressText, cls: "dayspann-section-progress" });
+    } else {
+      heading.createSpan({
+        text: this.plugin.t("section.heading", { title, count: items.length }),
+      });
+    }
     heading.createSpan("dayspann-section-line");
     setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
 
@@ -959,7 +980,14 @@ export class DayspannView extends ItemView {
     const content = card.createDiv("dayspann-card-content");
     const head = content.createDiv("dayspann-project-head");
     const headText = head.createDiv("dayspann-project-head-text");
-    headText.createEl("h3", { text: title });
+    const headingEl = headText.createEl("h3", { text: title });
+    // 完了していないカードの完了条件は、次の一手とタイトルのツールチップにする（旗の行は次の一手があるときは出さない）。
+    const goalText = record.archived ? "" : record.goal;
+    const goalTooltip = goalText ? this.plugin.t("view.goalTooltip", { goal: goalText }) : "";
+    if (goalTooltip) {
+      headingEl.setAttribute("title", goalTooltip);
+      setTooltip(headingEl, goalTooltip);
+    }
     const headActions = head.createDiv("dayspann-project-head-actions");
     this.renderDuePill(headActions, pill, locale);
     const more = this.iconButton(headActions, "ellipsis", this.plugin.t("action.actions"), () => undefined);
@@ -991,6 +1019,13 @@ export class DayspannView extends ItemView {
           menuItem.setTitle(this.plugin.t("action.openSource")).setIcon("external-link").onClick(() => void this.plugin.openRecordSource(record))
         );
       }
+      if (goalText) {
+        menu.addItem((menuItem) =>
+          menuItem.setTitle(this.plugin.t("action.viewGoal")).setIcon("flag").onClick(() => {
+            showGoal(this.app, goalText, (key, variables) => this.plugin.t(key, variables));
+          })
+        );
+      }
       menu.addSeparator();
       this.addArchiveMenuItem(menu, record);
       menu.addItem((menuItem) =>
@@ -1000,15 +1035,15 @@ export class DayspannView extends ItemView {
       menu.showAtPosition({ x: mouse.clientX, y: mouse.clientY });
     });
 
-    if (record.goal) {
-      const goal = content.createDiv({ cls: "dayspann-card-goal" });
-      setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
-      goal.createSpan({ text: record.goal, cls: "dayspann-card-goal-text" });
-      setTooltip(goal, record.goal);
-    }
-
     // 完了していないカードは、タイトルの「｜」より後ろを「次の一手」として出す。全文を折り返して出す（切らない）。
     const nextAction = record.archived ? "" : splitTitle(record.title).nextAction;
+    // 次の一手があるときは完了条件の旗行を出さない。次の一手がなく完了条件だけあるときは、空にしないため旗行を残す。アーカイブでは出さない。
+    if (goalText && !nextAction) {
+      const goal = content.createDiv({ cls: "dayspann-card-goal" });
+      setIcon(goal.createSpan("dayspann-card-goal-icon"), "flag");
+      goal.createSpan({ text: goalText, cls: "dayspann-card-goal-text" });
+      setTooltip(goal, goalTooltip);
+    }
     const stalled = record.archived || record.completed
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
@@ -1019,8 +1054,9 @@ export class DayspannView extends ItemView {
       setIcon(icon, "arrow-right");
       icon.setAttribute("aria-label", this.plugin.t("view.nextAction"));
       next.createSpan({ text: nextAction, cls: "dayspann-card-next-text" });
-      next.setAttribute("title", nextAction);
-      setTooltip(next, nextAction);
+      const nextTooltip = goalTooltip || nextAction;
+      next.setAttribute("title", nextTooltip);
+      setTooltip(next, nextTooltip);
     }
     const excerpt = excerptForCard(record.excerpt);
     if (excerpt) {
