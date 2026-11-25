@@ -410,8 +410,7 @@ export function plannedDateKeysInWeek(schedule: HabitSchedule, todayKey: string)
 const MAX_NEXT_DATE_SEARCH_DAYS = 366;
 
 /**
- * 次回の予定日（YYYY-MM-DD）を返す。
- * 毎日（daily かつ interval 1）と予定設定なし（none）は null（表示を省略する）。
+ * 次回の予定日（YYYY-MM-DD）を返す。予定設定なし（none）や終了日後は null。
  * doneToday が true のときは明日以降、false のときは今日以降で最初の予定日を返す。
  */
 export function nextHabitScheduledDate(
@@ -420,7 +419,6 @@ export function nextHabitScheduledDate(
   doneToday: boolean
 ): string | null {
   if (schedule.kind === "none") return null;
-  if (schedule.kind === "daily" && (schedule.interval ?? 1) <= 1) return null;
   if (!parseDateKey(todayKey)) return null;
   const startOffset = doneToday ? 1 : 0;
   for (let offset = startOffset; offset <= MAX_NEXT_DATE_SEARCH_DAYS; offset += 1) {

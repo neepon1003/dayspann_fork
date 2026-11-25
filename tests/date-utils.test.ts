@@ -2876,11 +2876,11 @@ test("streakWeeks and streakDays support multi-week and multi-day intervals", ()
   assert.deepEqual(streakDays(every3Days, "2026-11-29", 3), { current: 0, longest: 3 });
 });
 
-test("nextHabitScheduledDate returns next date for non-daily habits and skips daily", () => {
-  // 毎日（interval 1）は表示省略（null）
+test("nextHabitScheduledDate returns next date for daily and interval habits", () => {
+  // 毎日（interval 1）も未実行なら今日、実行済みなら明日を返す
   const daily = readHabitSchedule({ routine_type: "daily" });
-  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", false), null);
-  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", true), null);
+  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", false), "2026-11-25");
+  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", true), "2026-11-26");
 
   // 3日ごとは出る
   const every3Days = readHabitSchedule({
