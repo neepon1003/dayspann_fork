@@ -118,9 +118,11 @@ export function parseRecord(file: TFile, content: string): DayspannRecord | null
   }
 
   // PJ-span に出すのは、type が project（プロジェクト）か habit（習慣）のノートだけ。
+  // title プロパティが無い・空のときはファイル名（basename）を使う。
   const type = readRecordType(data.type);
   if (!type) return null;
-  const title = typeof data.title === "string" ? data.title.trim() : "";
+  const rawTitle = typeof data.title === "string" ? data.title.trim() : "";
+  const title = rawTitle || file.basename.trim();
   const rawDate =
     data.date instanceof Date
       ? data.date.toISOString().slice(0, 10)
