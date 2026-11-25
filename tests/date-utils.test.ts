@@ -133,6 +133,7 @@ import {
 import {
   habitTargetProgress,
   isHabitScheduled,
+  nextHabitScheduledDate,
   plannedDateKeysInWeek,
   readHabitSchedule,
   readHabitTarget,
@@ -2873,4 +2874,40 @@ test("streakWeeks and streakDays support multi-week and multi-day intervals", ()
   assert.deepEqual(streakDays(every3Days, "2026-11-25", 3), { current: 3, longest: 3 });
   assert.deepEqual(streakDays(every3Days, "2026-11-27", 3), { current: 3, longest: 3 });
   assert.deepEqual(streakDays(every3Days, "2026-11-29", 3), { current: 0, longest: 3 });
+});
+
+test("nextHabitScheduledDate returns next date for non-daily habits and skips daily", () => {
+  // 毎日（interval 1）は表示省略（null）
+  const daily = readHabitSchedule({ routine_type: "daily" });
+  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", false), null);
+  assert.equal(nextHabitScheduledDate(daily, "2026-11-25", true), null);
+
+  // 3日ごとは出る
+  const every3Days = readHabitSchedule({
+    routine_type: "daily",
+    routine_interval: 3,
+    routine_start: "2026-11-20",
+  });
+  assert.equal(nextHabitScheduledDate(every3Days, "2026-11-25", false), "2026-11-26");
+  assert.equal(nextHabitScheduledDate(every3Days, "2026-11-26", false), "2026-11-26");
+  assert.equal(nextHabitScheduledDate(every3Days, "2026-11-26", true), "2026-11-29");
+
+  // 隔週水曜（11/11 開始）
+  const biweekly = readHabitSchedule({
+    routine_type: "weekly",
+    routine_weekday: 3,
+    routine_interval: 2,
+    routine_start: "2026-11-11",
+  });
+  assert.equal(nextHabitScheduledDate(biweekly, "2026-11-25", false), "2026-11-25");
+  assert.equal(nextHabitScheduledDate(biweekly, "2026-11-25", true), "2026-12-09");
+  assert.equal(nextHabitScheduledDate(biweekly, "2026-12-01", false), "2026-12-09");
+
+  // 終了日を過ぎていれば null
+  const ended = readHabitSchedule({
+    routine_type: "weekly",
+    routine_weekday: 3,
+    routine_end: "2026-11-24",
+  });
+  assert.equal(nextHabitScheduledDate(ended, "2026-11-25", false), null);
 });

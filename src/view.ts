@@ -44,6 +44,7 @@ import {
   habitTargetProgress,
   HabitTargetProgress,
   isHabitScheduled,
+  nextHabitScheduledDate,
   plannedDateKeysInWeek,
   sortHabitsByPending,
   habitScheduledTodayStatus,
@@ -558,6 +559,39 @@ export class DayspannView extends ItemView {
       const periodProgress = progress && progress.period !== "day" && !restWeek ? progress : null;
       this.renderHeatmap(content, record, counts, todayKey, periodProgress);
     }
+    if (!record.archived) {
+      const nextDateKey = nextHabitScheduledDate(record.habitSchedule, todayKey, doneToday);
+      if (nextDateKey) {
+        this.renderHabitNextDate(content, nextDateKey, todayKey);
+      }
+    }
+  }
+
+  /** 毎日以外の習慣のカード下部に出す「次回予定日」ピル。 */
+  private renderHabitNextDate(parent: HTMLElement, nextDateKey: string, todayKey: string): void {
+    const locale = this.plugin.locale();
+    const fullDate = formatLocalizedDate(nextDateKey, locale);
+    let label: string;
+    if (nextDateKey === todayKey) {
+      label = this.plugin.t("habit.nextDateToday");
+    } else {
+      const shortDate = formatCompletedCardDate(nextDateKey, todayKey, locale);
+      const parsed = parseDateKey(nextDateKey);
+      const weekdayChar = parsed
+        ? this.plugin.t("heatmap.weekdays")[
+            new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day)).getUTCDay()
+          ] ?? ""
+        : "";
+      const withWeekday = locale === "ja" && weekdayChar ? `${shortDate}(${weekdayChar})` : shortDate;
+      label = this.plugin.t("habit.nextDate", { date: withWeekday });
+    }
+    const tooltip = this.plugin.t("habit.nextDateTooltip", { date: fullDate });
+    const row = parent.createDiv("dayspann-habit-next-row");
+    const badge = row.createSpan({ cls: "dayspann-habit-next-date" });
+    setIcon(badge.createSpan("dayspann-next-date-icon"), "calendar");
+    badge.createSpan({ text: label, cls: "dayspann-next-date-label" });
+    setTooltip(badge, tooltip);
+    badge.setAttribute("aria-label", tooltip);
   }
 
   /**

@@ -407,6 +407,30 @@ export function plannedDateKeysInWeek(schedule: HabitSchedule, todayKey: string)
   return keys;
 }
 
+const MAX_NEXT_DATE_SEARCH_DAYS = 366;
+
+/**
+ * 次回の予定日（YYYY-MM-DD）を返す。
+ * 毎日（daily かつ interval 1）と予定設定なし（none）は null（表示を省略する）。
+ * doneToday が true のときは明日以降、false のときは今日以降で最初の予定日を返す。
+ */
+export function nextHabitScheduledDate(
+  schedule: HabitSchedule,
+  todayKey: string,
+  doneToday: boolean
+): string | null {
+  if (schedule.kind === "none") return null;
+  if (schedule.kind === "daily" && (schedule.interval ?? 1) <= 1) return null;
+  if (!parseDateKey(todayKey)) return null;
+  const startOffset = doneToday ? 1 : 0;
+  for (let offset = startOffset; offset <= MAX_NEXT_DATE_SEARCH_DAYS; offset += 1) {
+    const candidate = shiftDateKey(todayKey, offset);
+    if (schedule.end && differenceInCalendarDays(candidate, schedule.end) > 0) return null;
+    if (isHabitScheduled(schedule, candidate)) return candidate;
+  }
+  return null;
+}
+
 /**
  * 習慣を、まだ目標に届いていないものから並べる。
  * isMet が false（まだ）→ null（日数を出していない）→ true（届いた）の順にする。
