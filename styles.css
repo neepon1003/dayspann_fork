@@ -1381,26 +1381,45 @@
   margin-top: 0;
 }
 
-/* 毎日以外の習慣のカード下部に出す「次回予定日」ピル。プロジェクトの次回予定日と見た目をそろえる。 */
+/* 習慣カード下部に出す「次回予定日」ボタン。プロジェクトの次回予定日と見た目をそろえる。 */
 .dayspann-habit-next-row {
   display: flex;
   align-items: center;
   margin-top: 8px;
 }
 
-.dayspann-habit-next-date {
+.dayspann-view button.dayspann-habit-next-date:not(.clickable-icon) {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  box-sizing: border-box;
   height: 22px;
+  min-height: 22px;
   padding: 0 7px;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  background-color: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  box-shadow: none;
   color: var(--text-normal);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dayspann-view button.dayspann-habit-next-date:not(.clickable-icon):hover {
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.dayspann-view button.dayspann-habit-next-date:not(.clickable-icon).is-muted {
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-faint);
 }
 
 .dayspann-habit-stats {

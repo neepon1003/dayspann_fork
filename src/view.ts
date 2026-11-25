@@ -561,21 +561,30 @@ export class DayspannView extends ItemView {
       const periodProgress = progress && progress.period !== "day" && !restWeek ? progress : null;
       this.renderHeatmap(content, record, counts, todayKey, periodProgress);
     }
-    if (!record.archived) {
+    if (!record.archived && record.taskchute) {
       const nextDateKey = nextHabitScheduledDate(record.habitSchedule, todayKey, doneToday);
-      if (nextDateKey) {
-        this.renderHabitNextDate(content, nextDateKey, todayKey);
-      }
+      this.renderHabitNextDate(content, record, nextDateKey, todayKey);
     }
   }
 
-  /** 毎日以外の習慣のカード下部に出す「次回予定日」ピル。 */
-  private renderHabitNextDate(parent: HTMLElement, nextDateKey: string, todayKey: string): void {
+  /** 習慣カード下部に出す「次回予定日」ボタン。クリックすると TaskChute のルーチン設定を開く。 */
+  private renderHabitNextDate(
+    parent: HTMLElement,
+    record: DayspannRecord,
+    nextDateKey: string | null,
+    todayKey: string
+  ): void {
     const locale = this.plugin.locale();
-    const fullDate = formatLocalizedDate(nextDateKey, locale);
     let label: string;
-    if (nextDateKey === todayKey) {
+    let tooltip: string;
+    let muted = false;
+    if (!nextDateKey) {
+      label = this.plugin.t("nextDate.none");
+      tooltip = this.plugin.t("habit.nextDateNoneTooltip");
+      muted = true;
+    } else if (nextDateKey === todayKey) {
       label = this.plugin.t("habit.nextDateToday");
+      tooltip = this.plugin.t("habit.nextDateTooltip", { date: formatLocalizedDate(nextDateKey, locale) });
     } else {
       const shortDate = formatCompletedCardDate(nextDateKey, todayKey, locale);
       const parsed = parseDateKey(nextDateKey);
@@ -586,14 +595,22 @@ export class DayspannView extends ItemView {
         : "";
       const withWeekday = locale === "ja" && weekdayChar ? `${shortDate}(${weekdayChar})` : shortDate;
       label = this.plugin.t("habit.nextDate", { date: withWeekday });
+      tooltip = this.plugin.t("habit.nextDateTooltip", { date: formatLocalizedDate(nextDateKey, locale) });
     }
-    const tooltip = this.plugin.t("habit.nextDateTooltip", { date: fullDate });
     const row = parent.createDiv("dayspann-habit-next-row");
-    const badge = row.createSpan({ cls: "dayspann-habit-next-date" });
-    setIcon(badge.createSpan("dayspann-next-date-icon"), "calendar");
-    badge.createSpan({ text: label, cls: "dayspann-next-date-label" });
-    setTooltip(badge, tooltip);
-    badge.setAttribute("aria-label", tooltip);
+    const button = row.createEl("button", {
+      cls: muted ? "dayspann-habit-next-date is-muted" : "dayspann-habit-next-date",
+      attr: { type: "button", "aria-label": tooltip },
+    });
+    setIcon(button.createSpan("dayspann-next-date-icon"), "calendar");
+    button.createSpan({ text: label, cls: "dayspann-next-date-label" });
+    setTooltip(button, tooltip);
+    button.addEventListener("keydown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.plugin.openHabitRoutineModal(record);
+    });
   }
 
   /**

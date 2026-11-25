@@ -489,6 +489,181 @@ export default class DayspannPlugin extends Plugin {
     await this.reloadTaskChuteView(record.file, today);
   }
 
+  /**
+   * 習慣カードの「次回予定日」から TaskChute のルーチン設定モーダルを開く。
+   * 開始時刻が空のまま保存したときは scheduled_time を空白で残す。
+   */
+  async openHabitRoutineModal(record: DayspannRecord): Promise<void> {
+    const host = this.app as unknown as TaskChuteHost;
+    if (!isTaskChuteEnabled(host)) {
+      new Notice(this.t("notice.habitLogNoTaskChute"));
+      return;
+    }
+    const view = await this.ensureTaskChuteRoutineView();
+    if (!view) {
+      new Notice(this.t("notice.routineModalUnavailable"));
+      return;
+    }
+
+    const file = record.file;
+    const rawFm = (this.app.metadataCache.getFileCache(file)?.frontmatter ?? {}) as Record<string, unknown>;
+    const fm: Record<string, unknown> = { ...rawFm };
+    const rawTime = typeof fm.scheduled_time === "string" ? fm.scheduled_time.trim() : "";
+    const timeMatch = /^(\d{1,2}):(\d{2})/.exec(rawTime);
+    const scheduledTime =
+      timeMatch && Number(timeMatch[1]) <= 23 && Number(timeMatch[2]) <= 59
+        ? `${String(Number(timeMatch[1])).padStart(2, "0")}:${timeMatch[2]}`
+        : "";
+    const today = this.todayKey();
+    const task: Record<string, unknown> = {
+      file,
+      path: file.path,
+      isRoutine: fm.isRoutine === true || fm.isRoutine === "true",
+      frontmatter: fm,
+      displayTitle: typeof fm.title === "string" && fm.title.trim() ? fm.title.trim() : file.basename,
+      routine_type: typeof fm.routine_type === "string" && fm.routine_type.trim() ? fm.routine_type.trim() : "daily",
+      routine_interval: typeof fm.routine_interval === "number" && fm.routine_interval >= 1 ? fm.routine_interval : 1,
+      routine_enabled: fm.routine_enabled !== false && fm.routine_enabled !== "false",
+      routine_start: readDateKey(fm.routine_start) || today,
+    };
+    const endKey = readDateKey(fm.routine_end);
+    if (endKey) task.routine_end = endKey;
+    if (scheduledTime) task.scheduledTime = scheduledTime;
+    for (const key of [
+      "routine_weekday",
+      "routine_weekdays",
+      "weekdays",
+      "routine_week",
+      "routine_weeks",
+      "routine_monthday",
+      "routine_monthdays",
+    ]) {
+      if (fm[key] !== undefined) task[key] = fm[key];
+    }
+
+    const doc = this.app.workspace.containerEl.ownerDocument ?? document;
+    const placeholder = createEl("button");
+    try {
+      view.showRoutineEditModal(task, placeholder);
+    } catch {
+      new Notice(this.t("notice.routineModalUnavailable"));
+      return;
+    }
+
+    const modals = doc.querySelectorAll<HTMLElement>(".routine-edit-modal");
+    const modalEl = modals.length ? modals[modals.length - 1] : null;
+    if (!modalEl) return;
+
+    const state = { blankTime: false, saved: false };
+    const timeInput = modalEl.querySelector<HTMLInputElement>('input[type="time"]');
+    const form = modalEl.querySelector("form");
+    if (timeInput && form) {
+      if (!scheduledTime) timeInput.value = "";
+      form.addEventListener(
+        "submit",
+        () => {
+          if (timeInput.value) {
+            state.blankTime = false;
+            return;
+          }
+          timeInput.value = "00:00";
+          state.blankTime = true;
+        },
+        true
+      );
+    }
+
+    const isBlankTimeNotice = (text: string): boolean =>
+      text.includes("00:00開始予定") || text.includes("starts at 00:00");
+    const dismissBlankTimeNotices = (): void => {
+      for (const node of Array.from(doc.querySelectorAll(".notice"))) {
+        if (isBlankTimeNotice(node.textContent ?? "")) node.remove();
+      }
+    };
+
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      this.app.metadataCache.offref(ref);
+      window.clearTimeout(giveUp);
+    };
+    const ref = this.app.metadataCache.on("changed", (changed) => {
+      if (settled || changed.path !== file.path) return;
+      const dropTime = state.blankTime;
+      state.saved = true;
+      finish();
+      window.setTimeout(() => {
+        void (async () => {
+          if (dropTime) {
+            await this.app.fileManager.processFrontMatter(file, (nextFm: Record<string, unknown>) => {
+              nextFm.scheduled_time = "";
+            });
+            dismissBlankTimeNotices();
+            const noticeCleaner = window.setInterval(dismissBlankTimeNotices, 100);
+            window.setTimeout(() => window.clearInterval(noticeCleaner), 2000);
+            new Notice(this.t("notice.routineSaved", { title: displayTitle(record.title) }));
+          }
+          await reloadTaskChuteViewIfOpen(this.app.workspace);
+          await this.refreshViewsAfterWrite(file.path);
+        })();
+      }, 0);
+    });
+    const giveUp = window.setTimeout(finish, 120000);
+    const observer = new MutationObserver(() => {
+      if (modalEl.isConnected) return;
+      observer.disconnect();
+      window.setTimeout(() => {
+        if (!settled && !state.saved) finish();
+      }, 8000);
+    });
+    observer.observe(doc.body, { childList: true, subtree: true });
+  }
+
+  private async ensureTaskChuteRoutineView(): Promise<{
+    showRoutineEditModal: (task: Record<string, unknown>, trigger: HTMLElement) => void;
+  } | null> {
+    type RoutineView = {
+      showRoutineEditModal?: (task: Record<string, unknown>, trigger: HTMLElement) => void;
+    };
+    type DeferredLeaf = {
+      view?: RoutineView;
+      loadIfDeferred?: () => Promise<void>;
+    };
+    const toRoutineView = (leaf: DeferredLeaf | undefined) => {
+      const view = leaf?.view;
+      return view && typeof view.showRoutineEditModal === "function"
+        ? (view as { showRoutineEditModal: (task: Record<string, unknown>, trigger: HTMLElement) => void })
+        : null;
+    };
+    const previous = this.app.workspace.getMostRecentLeaf();
+    const existing = this.app.workspace.getLeavesOfType("taskchute-view")[0] as DeferredLeaf | undefined;
+    let view = toRoutineView(existing);
+    if (!view && existing?.loadIfDeferred) {
+      try {
+        await existing.loadIfDeferred();
+      } catch {
+        // 読み込み失敗時は下のフォールバックへ
+      }
+      view = toRoutineView(existing);
+    }
+    if (!view) {
+      const leaf = this.app.workspace.getLeaf("tab");
+      await leaf.setViewState({ type: "taskchute-view", active: true });
+      const deferred = leaf as unknown as DeferredLeaf;
+      if (!toRoutineView(deferred) && deferred.loadIfDeferred) {
+        try {
+          await deferred.loadIfDeferred();
+        } catch {
+          // 続行
+        }
+      }
+      view = toRoutineView(deferred);
+      if (previous) this.app.workspace.setActiveLeaf(previous, { focus: true });
+    }
+    return view;
+  }
+
   /** 次回予定日（frontmatter の target_date）を変更または空にする。 */
   async setRecordTargetDate(record: DayspannRecord, dateKey: string): Promise<void> {
     const trimmed = dateKey.trim();
