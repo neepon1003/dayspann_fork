@@ -538,8 +538,10 @@ export class DayspannView extends ItemView {
       mark.setAttribute("aria-label", tooltip);
     }
 
-    // 「✓ 今日やった」は名前の右、「…」の左に置く。「今日まだ」は出さない（ボタンで分かる）。
-    if (counts) this.renderHabitLogButton(headActions, record, doneToday);
+    // 「✓ 今日やった」は設定がオンのときだけ出す。
+    if (counts && this.plugin.settings.habitLogButtonEnabled) {
+      this.renderHabitLogButton(headActions, record, doneToday);
+    }
 
     const actions = headActions.createDiv("dayspann-card-actions");
     const more = this.iconButton(actions, "ellipsis", this.plugin.t("action.actions"), () => undefined);

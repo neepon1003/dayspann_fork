@@ -153,6 +153,8 @@ export interface DayspannSettings {
   habitFilter: HabitFilter;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;
+  /** 習慣カードに「今日やった」ボタンを出すか。TaskChute 側だけで実行を記録するときはオフ。 */
+  habitLogButtonEnabled: boolean;
   /** 「今日やった」で記録したあとに動かす QuickAdd の選択肢の名前。空なら動かさない。 */
   habitQuickAddChoice: string;
   /** 「今日やった」で記録したあとに、PJ-span の「メモと次回」の画面を出すか。QuickAdd の名前が入っていれば、そちらが先。 */
@@ -174,6 +176,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   collapsedHabitGroups: [],
   habitFilter: "all",
   activeTab: DEFAULT_RECORD_TYPE,
+  habitLogButtonEnabled: false,
   habitQuickAddChoice: "",
   habitMemoEnabled: true,
   habitDailyLogFolder: DEFAULT_DAILY_LOG_FOLDER,
@@ -1056,6 +1059,10 @@ export default class DayspannPlugin extends Plugin {
       collapsedHabitGroups: normalizeCollapsedHabitGroups(saved?.collapsedHabitGroups),
       habitFilter: normalizeHabitFilter(saved?.habitFilter),
       activeTab: normalizeRecordType(saved?.activeTab),
+      habitLogButtonEnabled:
+        typeof saved?.habitLogButtonEnabled === "boolean"
+          ? saved.habitLogButtonEnabled
+          : DEFAULT_SETTINGS.habitLogButtonEnabled,
       habitQuickAddChoice: normalizeQuickAddChoiceName(saved?.habitQuickAddChoice),
       habitMemoEnabled: normalizeHabitMemoEnabled(saved?.habitMemoEnabled),
       habitDailyLogFolder: normalizeDailyLogFolder(saved?.habitDailyLogFolder),
@@ -1382,6 +1389,17 @@ class DayspannSettingTab extends PluginSettingTab {
         ],
       },
       {
+        name: this.plugin.t("setting.habitLogButton"),
+        desc: this.plugin.t("setting.habitLogButtonDesc"),
+        render: (setting) => {
+          setting.addToggle((toggle) =>
+            toggle
+              .setValue(this.plugin.settings.habitLogButtonEnabled)
+              .onChange((value) => void this.setHabitLogButtonEnabled(value))
+          );
+        },
+      },
+      {
         name: this.plugin.t("setting.habitMemo"),
         desc: this.plugin.t("setting.habitMemoDesc"),
         render: (setting) => {
@@ -1465,6 +1483,12 @@ class DayspannSettingTab extends PluginSettingTab {
   private async setHabitQuickAddChoice(value: string): Promise<void> {
     this.plugin.settings.habitQuickAddChoice = normalizeQuickAddChoiceName(value);
     await this.plugin.saveSettings();
+  }
+
+  private async setHabitLogButtonEnabled(value: boolean): Promise<void> {
+    this.plugin.settings.habitLogButtonEnabled = value;
+    await this.plugin.saveSettings();
+    await this.plugin.refreshViews();
   }
 
   private async setHabitMemoEnabled(value: boolean): Promise<void> {
