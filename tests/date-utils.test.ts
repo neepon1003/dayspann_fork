@@ -82,7 +82,16 @@ import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBo
 import { planCardActions } from "../src/card-actions";
 import "./smooth-refresh.test";
 import { buildDuePill } from "../src/due-pill";
-import { countCompletedToday, countInTodayProgress, countProjectSummary, isInTodayList, partitionProjectGroups, shouldShowInTodaySection } from "../src/project-groups";
+import {
+  buildNextDateBadge,
+  countCompletedToday,
+  countInTodayProgress,
+  countProjectSummary,
+  hasFutureTargetDate,
+  isInTodayList,
+  partitionProjectGroups,
+  shouldShowInTodaySection,
+} from "../src/project-groups";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
 import { appendLogLine, appendLogLineToFile, readLatestCompletionLogDate, resolveCompletedDate } from "../src/log-entry";
 import { normalizeRecordType, readRecordType } from "../src/record-type";
@@ -2641,4 +2650,227 @@ test("今日やるの完了件数は、今日完了したプロジェクト全�
   assert.equal(shouldShowInTodaySection({ remaining: 0, doneToday: 0 }), false);
   assert.deepEqual(countInTodayProgress([], today), { remaining: 0, doneToday: 0 });
   assert.equal(shouldShowInTodaySection(countInTodayProgress([], today)), false);
+});
+
+test("countInTodayProgress and partitionProjectGroups reflect today's TaskChute executions", () => {
+  const today = "2026-11-24";
+  const pendingLater = {
+    title: "未実行・先",
+    date: "2026-11-30",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const pendingSoon = {
+    title: "未実行・近い",
+    date: "2026-11-25",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const workedStillToday = {
+    title: "実行済み・今日のまま",
+    date: "2026-11-24",
+    archived: false,
+    taskchute: { targetDate: today },
+  };
+  const workedRescheduled = {
+    title: "実行済み・明日予約",
+    date: "2026-11-26",
+    archived: false,
+    taskchute: { targetDate: "2026-11-25" },
+  };
+  const archivedToday = {
+    title: "今日アーカイブ完了",
+    date: "2026-11-24",
+    archived: true,
+    completed: today,
+    taskchute: { targetDate: today },
+  };
+  const workedTitles = new Set([workedStillToday.title, workedRescheduled.title, archivedToday.title]);
+  const isWorkedToday = (r: { title: string }) => workedTitles.has(r.title);
+  const records = [pendingLater, workedStillToday, pendingSoon, workedRescheduled, archivedToday];
+
+  assert.deepEqual(countInTodayProgress(records, today, isWorkedToday), {
+    remaining: 2,
+    doneToday: 3,
+  });
+
+  const groups = partitionProjectGroups(records, today, isWorkedToday);
+  assert.deepEqual(
+    groups.inToday.map((r) => r.title),
+    ["未実行・近い", "未実行・先", "実行済み・今日のまま"]
+  );
+  assert.deepEqual(
+    groups.dated.map((r) => r.title),
+    ["実行済み・明日予約"]
+  );
+});
+
+test("buildNextDateBadge and hasFutureTargetDate classify target_date states", () => {
+  const today = "2026-11-24";
+  const futureRec = { title: "未来", date: "2026-12-01", archived: false, taskchute: { targetDate: "2026-11-27" } };
+  const pastRec = { title: "過去", date: "2026-12-01", archived: false, taskchute: { targetDate: "2026-11-20" } };
+  const todayRec = { title: "今日", date: "2026-12-01", archived: false, taskchute: { targetDate: today } };
+  const emptyRec = { title: "未設定", date: "2026-12-01", archived: false, taskchute: {} };
+  const archivedRec = { title: "完了", date: "2026-12-01", archived: true, taskchute: { targetDate: "2026-11-27" } };
+  const nonTcRec = { title: "非連携", date: "2026-12-01", archived: false };
+
+  assert.deepEqual(buildNextDateBadge(futureRec, today), {
+    kind: "future",
+    appearance: "scheduled",
+    dateKey: "2026-11-27",
+    days: 3,
+  });
+  assert.deepEqual(buildNextDateBadge(pastRec, today), {
+    kind: "past",
+    appearance: "overdue",
+    dateKey: "2026-11-20",
+    days: 4,
+  });
+  assert.equal(buildNextDateBadge(todayRec, today), null);
+  assert.deepEqual(buildNextDateBadge(emptyRec, today), { kind: "none", appearance: "muted" });
+  assert.equal(buildNextDateBadge(archivedRec, today), null);
+  assert.equal(buildNextDateBadge(nonTcRec, today), null);
+
+  assert.equal(hasFutureTargetDate(futureRec, today), true);
+  assert.equal(hasFutureTargetDate(pastRec, today), false);
+  assert.equal(hasFutureTargetDate(todayRec, today), false);
+  assert.equal(hasFutureTargetDate(emptyRec, today), false);
+  assert.equal(hasFutureTargetDate(nonTcRec, today), false);
+});
+
+test("readHabitSchedule and isHabitScheduled honor routine_interval, start, end, and enabled", () => {
+  // 2週間ごと・水曜（2026-11-11 が開始水曜）
+  const biweekly = readHabitSchedule({
+    routine_type: "weekly",
+    routine_weekday: 3,
+    routine_interval: 2,
+    routine_start: "2026-11-11",
+  });
+  assert.equal(isHabitScheduled(biweekly, "2026-11-04"), false); // 開始前
+  assert.equal(isHabitScheduled(biweekly, "2026-11-11"), true);  // 0週目
+  assert.equal(isHabitScheduled(biweekly, "2026-11-18"), false); // 1週目（スキップ）
+  assert.equal(isHabitScheduled(biweekly, "2026-11-25"), true);  // 2週目
+  assert.equal(isHabitScheduled(biweekly, "2026-12-02"), false); // 3週目（スキップ）
+
+  // 3日ごと（2026-11-20 開始、2026-11-26 終了）
+  const every3Days = readHabitSchedule({
+    routine_type: "daily",
+    routine_interval: 3,
+    routine_start: "2026-11-20",
+    routine_end: "2026-11-26",
+  });
+  assert.equal(isHabitScheduled(every3Days, "2026-11-20"), true);
+  assert.equal(isHabitScheduled(every3Days, "2026-11-21"), false);
+  assert.equal(isHabitScheduled(every3Days, "2026-11-23"), true);
+  assert.equal(isHabitScheduled(every3Days, "2026-11-26"), true);
+  assert.equal(isHabitScheduled(every3Days, "2026-11-29"), false); // 終了後
+
+  // 2か月ごと・毎月15日
+  const bimonthly = readHabitSchedule({
+    routine_type: "monthly_date",
+    routine_monthday: 15,
+    routine_interval: 2,
+    routine_start: "2026-11-01",
+  });
+  assert.equal(isHabitScheduled(bimonthly, "2026-11-15"), true);
+  assert.equal(isHabitScheduled(bimonthly, "2026-12-15"), false);
+  assert.equal(isHabitScheduled(bimonthly, "2027-01-15"), true);
+
+  // routine_enabled: false は常に予定外
+  const disabled = readHabitSchedule({
+    routine_type: "daily",
+    routine_enabled: false,
+  });
+  assert.deepEqual(disabled, { kind: "none" });
+  assert.equal(isHabitScheduled(disabled, "2026-11-25"), false);
+});
+
+test("mergeHabitLogs ignores stale inbox delete/upsert older than snapshot recordedAt", () => {
+  const snapshot = parseMonthlyLog(
+    JSON.stringify({
+      taskExecutions: {
+        "2026-11-23": [
+          {
+            taskId: "tc-pushup",
+            taskPath: "TaskChute/Task/腕立て.md",
+            instanceId: "TaskChute/Task/腕立て.md_2026-11-23_base",
+            startTime: "08:32:00",
+            stopTime: "08:39:45",
+            recordedAt: "2026-11-22T23:39:45.695Z",
+          },
+        ],
+      },
+    })
+  );
+  const staleDeltas = parseDeltaLines(
+    [
+      JSON.stringify({
+        op: "upsert",
+        dateKey: "2026-11-23",
+        recordedAt: "2026-11-22T23:38:08.081Z",
+        payload: {
+          taskId: "tc-pushup",
+          taskPath: "TaskChute/Task/腕立て.md",
+          instanceId: "TaskChute/Task/腕立て.md_2026-11-23_base",
+          stopTime: "08:38:08",
+        },
+      }),
+      JSON.stringify({
+        op: "delete",
+        dateKey: "2026-11-23",
+        recordedAt: "2026-11-22T23:38:28.560Z",
+        payload: {
+          taskId: "tc-pushup",
+          taskPath: "TaskChute/Task/腕立て.md",
+          instanceId: "TaskChute/Task/腕立て.md_2026-11-23_base",
+        },
+      }),
+    ].join("\n")
+  );
+  const merged = mergeHabitLogs([snapshot], staleDeltas);
+  assert.equal(merged["2026-11-23"]?.length, 1);
+  assert.equal(merged["2026-11-23"]?.[0]?.stopTime, "08:39:45");
+
+  // 新しい時刻の delete は従来どおり消える
+  const newerDelete = parseDeltaLines(
+    JSON.stringify({
+      op: "delete",
+      dateKey: "2026-11-23",
+      recordedAt: "2026-11-22T23:40:00.000Z",
+      payload: {
+        taskId: "tc-pushup",
+        taskPath: "TaskChute/Task/腕立て.md",
+        instanceId: "TaskChute/Task/腕立て.md_2026-11-23_base",
+      },
+    })
+  );
+  const deleted = mergeHabitLogs([snapshot], newerDelete);
+  assert.equal(deleted["2026-11-23"]?.length, 0);
+});
+
+test("streakWeeks and streakDays support multi-week and multi-day intervals", () => {
+  // 2週間ごと（stepWeeks = 2）：10/28・11/11・11/25 の隔週水曜に実行
+  const biweeklyCounts = {
+    "2026-10-28": 1,
+    "2026-11-11": 1,
+    "2026-11-25": 1,
+  };
+  // 実行週（11/25）で 3 連続
+  assert.deepEqual(streakWeeks(biweeklyCounts, "2026-11-25", 1, 2), { current: 3, longest: 3 });
+  // 翌週の休み週（12/02）でも途切れず 3 連続
+  assert.deepEqual(streakWeeks(biweeklyCounts, "2026-12-02", 1, 2), { current: 3, longest: 3 });
+  // 次の予定週（12/09・まだ未実行）でも 2 週前が達成済みなので 3 連続を維持
+  assert.deepEqual(streakWeeks(biweeklyCounts, "2026-12-09", 1, 2), { current: 3, longest: 3 });
+  // さらに次の週（12/16）まで未実行なら途切れて 0（最長は 3）
+  assert.deepEqual(streakWeeks(biweeklyCounts, "2026-12-16", 1, 2), { current: 0, longest: 3 });
+
+  // 3日ごと（stepDays = 3）：11/19・11/22・11/25 に実行
+  const every3Days = {
+    "2026-11-19": 1,
+    "2026-11-22": 1,
+    "2026-11-25": 1,
+  };
+  assert.deepEqual(streakDays(every3Days, "2026-11-25", 3), { current: 3, longest: 3 });
+  assert.deepEqual(streakDays(every3Days, "2026-11-27", 3), { current: 3, longest: 3 });
+  assert.deepEqual(streakDays(every3Days, "2026-11-29", 3), { current: 0, longest: 3 });
 });

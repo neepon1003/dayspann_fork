@@ -29,12 +29,22 @@ import {
   sundayWeekNumber,
 } from "./habit-log";
 import { findPjSpanEntries } from "./habit-record";
-import { countInTodayProgress, countProjectSummary, partitionProjectGroups, shouldShowInTodaySection, type InTodayProgress } from "./project-groups";
+import {
+  buildNextDateBadge,
+  countInTodayProgress,
+  countProjectSummary,
+  hasFutureTargetDate,
+  partitionProjectGroups,
+  shouldShowInTodaySection,
+  type InTodayProgress,
+  type NextDateBadgeModel,
+} from "./project-groups";
 import { cardFlipKey, collectFlipRects, FLIP_KEY_ATTR, playFlipTransition, prefersReducedMotion, sectionFlipKey } from "./smooth-refresh";
 import {
   habitTargetProgress,
   HabitTargetProgress,
   isHabitScheduled,
+  plannedDateKeysInWeek,
   sortHabitsByPending,
   habitScheduledTodayStatus,
   filterHabitsScheduledToday,
@@ -53,6 +63,7 @@ export const DAYSPANN_VIEW_TYPE = "pj-span-view";
 interface CountedRecord {
   record: DayspannRecord;
   difference: number | null;
+  workedToday?: boolean;
 }
 
 type ViewSectionKind = DayspannSectionKind | "undated" | "archive";
@@ -101,11 +112,12 @@ export class DayspannView extends ItemView {
     if (refreshVersion !== this.refreshVersion) return;
 
     const today = this.plugin.todayKey();
-    let habitLogs: HabitLogDays | undefined;
-    if (tab === "habit") {
-      habitLogs = await this.plugin.loadTaskChuteLogs(await this.plugin.listTaskChuteLogMonths(today));
-      if (refreshVersion !== this.refreshVersion) return;
-    }
+    const logMonths = tab === "habit"
+      ? await this.plugin.listTaskChuteLogMonths(today)
+      : [today.slice(0, 7)];
+    if (refreshVersion !== this.refreshVersion) return;
+    const habitLogs = await this.plugin.loadTaskChuteLogs(logMonths);
+    if (refreshVersion !== this.refreshVersion) return;
 
     const root = this.viewRoot();
     const scrollTop = root.scrollTop;
@@ -206,13 +218,29 @@ export class DayspannView extends ItemView {
       return;
     }
 
+    // 今日 TaskChute で 1 回でも完了記録があるプロジェクトを集める（「今日やる」の進捗と並び順に使う）。
+    const workedTodayPaths = new Set<string>();
+    if (habitLogs) {
+      for (const record of records) {
+        if (record.archived || !record.taskchute) continue;
+        const logCounts = countHabitDays(habitLogs, {
+          taskId: record.taskchute.taskId,
+          path: record.file.path,
+          basename: record.file.basename,
+        });
+        if ((logCounts[today] ?? 0) > 0) workedTodayPaths.add(record.file.path);
+      }
+    }
+    const isWorkedToday = (record: DayspannRecord): boolean => workedTodayPaths.has(record.file.path);
+
     // 今日の一覧に入っているカードは「今日やる」へ。期日順・期日なしには出さない。完了はアーカイブへ。
-    const groups = partitionProjectGroups(records, today);
-    const inTodayProgress = countInTodayProgress(records, today);
+    const groups = partitionProjectGroups(records, today, isWorkedToday);
+    const inTodayProgress = countInTodayProgress(records, today, isWorkedToday);
     const toCounted = (list: typeof records): CountedRecord[] =>
       list.map((record) => ({
         record,
         difference: parseDateKey(record.date) ? differenceInCalendarDays(record.date, today) : null,
+        workedToday: isWorkedToday(record),
       }));
 
     this.renderSection(
@@ -524,8 +552,10 @@ export class DayspannView extends ItemView {
 
     // 続けている TaskChute のタスクなら、実行ログからヒートマップを出す。
     // 「今週 1/2」「今月 0/1」は、毎日の「今日まだ」と違ってボタンだけでは分からないので、数字の上に出す。
+    // 隔週などで今週が予定のない週（休み週）のときは「今週 0/1」を出さない。
     if (counts) {
-      const periodProgress = progress && progress.period !== "day" ? progress : null;
+      const restWeek = this.isHabitRestWeek(record, todayKey);
+      const periodProgress = progress && progress.period !== "day" && !restWeek ? progress : null;
       this.renderHeatmap(content, record, counts, todayKey, periodProgress);
     }
   }
@@ -559,12 +589,22 @@ export class DayspannView extends ItemView {
     });
   }
 
+  /** 隔週（routine_interval > 1）の週次習慣で、今週に予定日が 1 日も無い休み週か。 */
+  private isHabitRestWeek(record: DayspannRecord, todayKey: string): boolean {
+    return (
+      record.habitSchedule.kind === "weekly" &&
+      (record.habitSchedule.interval ?? 1) > 1 &&
+      plannedDateKeysInWeek(record.habitSchedule, todayKey).length === 0
+    );
+  }
+
   /**
    * 名前の横の日数と同じ決め方で、今の期間の目標に届いているかを返す。
-   * 日数を出さない習慣（TaskChute とつながっていないなど）は null。
+   * 日数を出さない習慣（TaskChute とつながっていないなど）や、隔週の休み週は null。
    */
   private habitMet(record: DayspannRecord, logs: HabitLogDays, todayKey: string): boolean | null {
     if (!record.taskchute || record.archived) return null;
+    if (this.isHabitRestWeek(record, todayKey)) return null;
     const counts = countHabitDays(logs, {
       taskId: record.taskchute.taskId,
       path: record.file.path,
@@ -688,9 +728,15 @@ export class DayspannView extends ItemView {
     }
     const locale = this.plugin.locale();
     const totalDays = countTotalActiveDays(counts);
+    const scheduleInterval = record.habitSchedule.kind === "none" ? 1 : (record.habitSchedule.interval ?? 1);
     const streak = record.streakUnit === "day"
-      ? streakDays(counts, todayKey)
-      : streakWeeks(counts, todayKey, weekStreakTarget(record.habitTarget));
+      ? streakDays(counts, todayKey, scheduleInterval)
+      : streakWeeks(
+          counts,
+          todayKey,
+          weekStreakTarget(record.habitTarget),
+          record.habitSchedule.kind === "weekly" ? scheduleInterval : 1
+        );
     const unit = record.streakUnit;
     const totalLabel = this.plugin.t("heatmap.totalLabel");
     const totalValue = formatCountUnit(locale, totalDays, "day");
@@ -971,6 +1017,10 @@ export class DayspannView extends ItemView {
     }
     const card = list.createDiv("dayspann-card");
     this.setFlipKey(card, cardFlipKey(record.file.path));
+    const workedToday = !record.archived && Boolean(item.workedToday);
+    if (workedToday) {
+      card.addClass("dayspann-card--worked-today");
+    }
     // 完了していない記録で、期日が今日から設定の日数後までなら「期日が近い」としてオレンジ色にする。
     const dueSoon = record.archived || record.completed
       ? null
@@ -1092,10 +1142,11 @@ export class DayspannView extends ItemView {
       goal.createSpan({ text: goalText, cls: "dayspann-card-goal-text" });
       setTooltip(goal, goalTooltip);
     }
-    const stalled = record.archived || record.completed
+    const stalled = record.archived || record.completed || hasFutureTargetDate(record, todayKey)
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
-    const hasLineActions = plan.today !== "none" || plan.complete || stalled !== null;
+    const nextDateBadge = buildNextDateBadge(record, todayKey);
+    const hasLineActions = plan.today !== "none" || plan.complete || stalled !== null || nextDateBadge !== null;
     if (nextAction) {
       const next = content.createDiv({ cls: "dayspann-card-next" });
       const icon = next.createSpan("dayspann-card-next-icon");
@@ -1111,9 +1162,12 @@ export class DayspannView extends ItemView {
       content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
     }
 
-    // 「今日やる」「完了」は本文の下、カード右下の右寄せ行に出す。本文を切らない。「…」は名前の右。
+    // 左に「次回予定日」、右に「今日やる」「完了」を並べる。本文を切らない。「…」は名前の右。
     if (hasLineActions) {
       const actions = content.createDiv("dayspann-card-actions dayspann-project-line-actions dayspann-project-action-row");
+      if (nextDateBadge) {
+        this.renderNextDateBadge(actions, record, nextDateBadge, todayKey, locale);
+      }
       if (stalled !== null) {
         const mark = actions.createDiv("dayspann-stalled");
         setIcon(mark, "hourglass");
@@ -1121,7 +1175,7 @@ export class DayspannView extends ItemView {
         setTooltip(mark, tooltip);
         mark.setAttribute("aria-label", tooltip);
       }
-      if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday");
+      if (plan.today !== "none") this.todayButton(actions, record, plan.today === "inToday", workedToday);
       if (plan.complete) {
         this.completeButton(
           actions,
@@ -1211,16 +1265,134 @@ export class DayspannView extends ItemView {
       : this.plugin.t("view.done");
   }
 
-  /** 「今日やる」の文字ピル。今日の一覧に入っているときは「今日 ✓」にして、アクセント色の塗りにする。ツールチップはこれまでと同じ。 */
-  private todayButton(parent: HTMLElement, record: DayspannRecord, inToday: boolean): HTMLButtonElement {
-    const tooltip = this.plugin.t(inToday ? "action.inTodayLabel" : "action.todayLabel");
+  /** カード左下の「次回予定日（target_date）」ピル。押すと次回予定日を変更できる。 */
+  private renderNextDateBadge(
+    parent: HTMLElement,
+    record: DayspannRecord,
+    badge: NextDateBadgeModel,
+    todayKey: string,
+    locale: "ja" | "en"
+  ): void {
+    let text: string;
+    let tooltip: string;
+    if (badge.kind === "future") {
+      const shortDate = formatCompletedCardDate(badge.dateKey, todayKey, locale);
+      const fullDate = formatLocalizedDate(badge.dateKey, locale);
+      text = this.plugin.t("nextDate.scheduled", { date: shortDate });
+      tooltip = this.plugin.t("nextDate.tooltipScheduled", { date: fullDate });
+    } else if (badge.kind === "past") {
+      const shortDate = formatCompletedCardDate(badge.dateKey, todayKey, locale);
+      const fullDate = formatLocalizedDate(badge.dateKey, locale);
+      text = this.plugin.t("nextDate.overdue", { date: shortDate });
+      tooltip = this.plugin.t("nextDate.tooltipOverdue", { date: fullDate, days: badge.days });
+    } else {
+      text = this.plugin.t("nextDate.none");
+      tooltip = this.plugin.t("nextDate.tooltipNone");
+    }
+
     const button = parent.createEl("button", {
-      cls: "dayspann-today-button" + (inToday ? " dayspann-today-button--done" : ""),
+      cls: `dayspann-next-date-badge is-${badge.appearance}`,
+      attr: { type: "button", "aria-label": tooltip },
+    });
+    setIcon(
+      button.createSpan("dayspann-next-date-icon"),
+      badge.kind === "past" ? "alert-circle" : "calendar"
+    );
+    button.createSpan({ text, cls: "dayspann-next-date-label" });
+    setTooltip(button, tooltip);
+    button.addEventListener("keydown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.openNextDateMenu(event, record);
+    });
+  }
+
+  /** 次回予定日（target_date）を変えるメニュー。今日・明日・3日後・1週間後・日付を選ぶ・外す。 */
+  private openNextDateMenu(event: MouseEvent, record: DayspannRecord): void {
+    const today = this.plugin.todayKey();
+    const menu = new Menu();
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.todayShort"))
+        .setIcon("sun")
+        .onClick(() => void this.plugin.addRecordToTaskChuteToday(record))
+    );
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponeTomorrow"))
+        .setIcon("sunrise")
+        .onClick(() => void this.plugin.setRecordTargetDate(record, shiftDateKey(today, 1)))
+    );
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.nextDateIn3Days"))
+        .setIcon("calendar-plus")
+        .onClick(() => void this.plugin.setRecordTargetDate(record, shiftDateKey(today, 3)))
+    );
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponeInWeek"))
+        .setIcon("calendar-clock")
+        .onClick(() => void this.plugin.setRecordTargetDate(record, shiftDateKey(today, 7)))
+    );
+    menu.addSeparator();
+    menu.addItem((menuItem) =>
+      menuItem
+        .setTitle(this.plugin.t("action.postponePick"))
+        .setIcon("calendar")
+        .onClick(() => void this.pickNextTargetDate(record, today))
+    );
+    if (record.taskchute?.targetDate) {
+      menu.addItem((menuItem) =>
+        menuItem
+          .setTitle(this.plugin.t("action.nextDateClear"))
+          .setIcon("x")
+          .onClick(() => void this.plugin.setRecordTargetDate(record, ""))
+      );
+    }
+    menu.showAtMouseEvent(event);
+  }
+
+  private async pickNextTargetDate(record: DayspannRecord, todayKey: string): Promise<void> {
+    const current = record.taskchute?.targetDate;
+    const defaultDateKey =
+      current && parseDateKey(current) && differenceInCalendarDays(current, todayKey) >= 0
+        ? current
+        : shiftDateKey(todayKey, 1);
+    const picked = await choosePostponeDate(this.app, defaultDateKey, todayKey, (key, variables) =>
+      this.plugin.t(key === "postponePick.title" ? "nextDate.pickTitle" : key, variables)
+    );
+    if (picked) await this.plugin.setRecordTargetDate(record, picked);
+  }
+
+  /** 「今日やる」の文字ピル。今日の一覧に入っているときは「✓ 今日」、今日 TaskChute で実行済みなら緑の「✓ 今日やった」にする。 */
+  private todayButton(
+    parent: HTMLElement,
+    record: DayspannRecord,
+    inToday: boolean,
+    workedToday = false
+  ): HTMLButtonElement {
+    const isWorked = inToday && workedToday;
+    const tooltip = this.plugin.t(
+      isWorked ? "action.workedTodayLabel" : inToday ? "action.inTodayLabel" : "action.todayLabel"
+    );
+    const cls =
+      "dayspann-today-button" +
+      (isWorked
+        ? " dayspann-today-button--worked"
+        : inToday
+          ? " dayspann-today-button--done"
+          : "");
+    const button = parent.createEl("button", {
+      cls,
       attr: { type: "button", "aria-label": tooltip },
     });
     if (inToday) setIcon(button.createSpan("dayspann-today-check"), "check");
     button.createSpan({
-      text: this.plugin.t(inToday ? "action.inTodayShort" : "action.todayShort"),
+      text: this.plugin.t(
+        isWorked ? "action.workedTodayShort" : inToday ? "action.inTodayShort" : "action.todayShort"
+      ),
       cls: "dayspann-today-label",
     });
     setTooltip(button, tooltip);

@@ -16,6 +16,7 @@ export interface HabitLogEntry {
   startTime?: string;
   stopTime?: string;
   isCompleted?: boolean;
+  recordedAt?: string;
 }
 
 /** 日付（YYYY-MM-DD）ごとのログ。 */
@@ -54,6 +55,7 @@ function readEntry(value: unknown): HabitLogEntry | null {
     instanceId: text(raw.instanceId),
     startTime: text(raw.startTime),
     stopTime: text(raw.stopTime),
+    recordedAt: text(raw.recordedAt),
   };
   if (typeof raw.isCompleted === "boolean") entry.isCompleted = raw.isCompleted;
   return entry;
@@ -103,6 +105,7 @@ export function parseDeltaLines(raw: string): HabitLogDelta[] {
 /**
  * 月ごとのログに、inbox の差分を記録した時刻の順に重ねる。
  * 同じ instanceId があれば上書き（upsert）、なければ足す。delete は同じ instanceId を消す。
+ * すでに本体ログにある記録のほうが recordedAt が新しいときは、古い差分（取り消し・上書き）を無視する。
  */
 export function mergeHabitLogs(snapshots: HabitLogDays[], deltas: HabitLogDelta[]): HabitLogDays {
   const days: HabitLogDays = {};
@@ -115,12 +118,25 @@ export function mergeHabitLogs(snapshots: HabitLogDays[], deltas: HabitLogDelta[
   for (const delta of ordered) {
     const entries = days[delta.dateKey] ?? [];
     const index = entries.findIndex((entry) => entry.instanceId === delta.entry.instanceId);
-    if (delta.op === "delete") {
-      if (index >= 0) entries.splice(index, 1);
-    } else if (index >= 0) {
-      entries[index] = { ...entries[index], ...withoutUndefined(delta.entry) };
-    } else {
-      entries.push({ ...delta.entry });
+    if (index >= 0) {
+      const existing = entries[index];
+      if (existing?.recordedAt && delta.recordedAt && existing.recordedAt > delta.recordedAt) {
+        continue;
+      }
+      if (delta.op === "delete") {
+        entries.splice(index, 1);
+      } else {
+        entries[index] = {
+          ...existing,
+          ...withoutUndefined(delta.entry),
+          recordedAt: delta.recordedAt || existing?.recordedAt,
+        };
+      }
+    } else if (delta.op !== "delete") {
+      entries.push({
+        ...delta.entry,
+        recordedAt: delta.recordedAt || delta.entry.recordedAt,
+      });
     }
     days[delta.dateKey] = entries;
   }
@@ -301,24 +317,41 @@ function currentRun(startKey: string, hasKey: (key: string) => boolean, stepDays
 
 /**
  * 日ごとの連続。1 回以上やった日を数える。
- * 今日がまだ空なら、昨日までの連続を出す（今日も昨日も空なら 0）。
- * 最長は、読み込んだログにある日のうち、いちばん長く続いた日数。
+ * stepDays（routine_interval。省略時は 1）日おきに続いている数を数える。
+ * 今日がまだ空なら、直近 stepDays 日以内の最新の実行日からさかのぼる（無ければ 0）。
+ * 最長は、読み込んだログにある日のうち、いちばん長く続いた回数。
  */
-export function streakDays(counts: Record<string, number>, todayKey: string): StreakResult {
-  const start = hasCount(counts, todayKey) ? todayKey : shiftDateKey(todayKey, -1);
-  const current = currentRun(start, (key) => hasCount(counts, key), 1);
+export function streakDays(counts: Record<string, number>, todayKey: string, stepDays = 1): StreakResult {
+  const step = Number.isInteger(stepDays) && stepDays >= 1 ? stepDays : 1;
+  let start: string | null = null;
+  for (let offset = 0; offset <= step; offset += 1) {
+    const candidate = shiftDateKey(todayKey, -offset);
+    if (hasCount(counts, candidate)) {
+      start = candidate;
+      break;
+    }
+  }
+  const current = start ? currentRun(start, (key) => hasCount(counts, key), step) : 0;
   const dates = Object.keys(counts).filter((key) => parseDateKey(key) && hasCount(counts, key) && key <= todayKey);
-  return { current, longest: Math.max(current, longestRun(dates, 1)) };
+  return { current, longest: Math.max(current, longestRun(dates, step)) };
 }
 
 /**
  * 週ごとの連続（日曜はじまり。ヒートマップと同じ）。
  * その週のやった日数が target（目標日数。省略時は 1）に届いていれば、その週は続いている。
- * 同じ日に何回やっても 1 日。今週がまだ届いていなければ、先週までの連続を出す（先週も届いていなければ 0）。
- * 最長は、読み込んだログにある週のうち、いちばん長く続いた週数。
+ * stepWeeks（routine_interval。省略時は 1。2 なら隔週）週おきに続いている数を数える。
+ * 今週がまだ届いていなければ、直近 stepWeeks 週以内の最新の達成週からさかのぼる（無ければ 0）。
+ * 最長は、読み込んだログにある週のうち、いちばん長く続いた数。
  */
-export function streakWeeks(counts: Record<string, number>, todayKey: string, target = 1): StreakResult {
+export function streakWeeks(
+  counts: Record<string, number>,
+  todayKey: string,
+  target = 1,
+  stepWeeks = 1
+): StreakResult {
   const goal = Number.isInteger(target) && target >= 1 ? target : 1;
+  const step = Number.isInteger(stepWeeks) && stepWeeks >= 1 ? stepWeeks : 1;
+  const stepDays = step * 7;
   const thisSunday = sundayOfDateKey(todayKey);
   const daysByWeek = new Map<string, number>();
   for (const key of Object.keys(counts)) {
@@ -328,9 +361,16 @@ export function streakWeeks(counts: Record<string, number>, todayKey: string, ta
   }
   const weeks = [...daysByWeek.entries()].filter(([, days]) => days >= goal).map(([sunday]) => sunday);
   const hasWeek = (sunday: string) => weeks.includes(sunday);
-  const start = hasWeek(thisSunday) ? thisSunday : shiftDateKey(thisSunday, -7);
-  const current = currentRun(start, hasWeek, 7);
-  return { current, longest: Math.max(current, longestRun(weeks, 7)) };
+  let start: string | null = null;
+  for (let offset = 0; offset <= step; offset += 1) {
+    const candidate = shiftDateKey(thisSunday, -offset * 7);
+    if (hasWeek(candidate)) {
+      start = candidate;
+      break;
+    }
+  }
+  const current = start ? currentRun(start, hasWeek, stepDays) : 0;
+  return { current, longest: Math.max(current, longestRun(weeks, stepDays)) };
 }
 
 /** ログのファイル名やパスから、月（YYYY-MM）を取り出す。YYYY-MM-tasks.json と YYYY-MM.jsonl に対応。 */

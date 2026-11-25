@@ -1,4 +1,4 @@
-import { parseDateKey, shiftDateKey } from "./date-utils";
+import { differenceInCalendarDays, parseDateKey, readDateKey, shiftDateKey } from "./date-utils";
 import { sundayOfDateKey } from "./habit-log";
 
 /**
@@ -162,13 +162,20 @@ export function habitTargetProgress(
   return { ...target, done, remaining, met: done >= target.target };
 }
 
+/** 間隔や開始・終了日の条件（TaskChute の routine_interval / routine_start / routine_end）。 */
+export interface HabitScheduleBounds {
+  interval?: number;
+  start?: string;
+  end?: string;
+}
+
 /** その日がルーチンの予定日かどうか。設定が無い・わからないときは none。 */
 export type HabitSchedule =
   | { kind: "none" }
-  | { kind: "daily" }
-  | { kind: "weekly"; weekdays: number[] }
-  | { kind: "monthDate"; days: Array<number | "last"> }
-  | { kind: "monthNth"; weeks: Array<number | "last">; weekdays: number[] };
+  | ({ kind: "daily" } & HabitScheduleBounds)
+  | ({ kind: "weekly"; weekdays: number[] } & HabitScheduleBounds)
+  | ({ kind: "monthDate"; days: Array<number | "last"> } & HabitScheduleBounds)
+  | ({ kind: "monthNth"; weeks: Array<number | "last">; weekdays: number[] } & HabitScheduleBounds);
 
 function weekdayOfDateKey(dateKey: string): number | undefined {
   const date = parseDateKey(dateKey);
@@ -276,23 +283,58 @@ export function readMonthWeeks(data: Record<string, unknown> | undefined): Array
   return weeks;
 }
 
+const WEEKLY_EPOCH_SUNDAY = "1970-01-04";
+
+/** TaskChute の routine_interval を読む。1 以上の整数以外は 1。 */
+export function readRoutineInterval(value: unknown): number {
+  if (value === undefined || value === null || value === "") return 1;
+  const num = Number(value);
+  return Number.isFinite(num) && num >= 1 ? Math.floor(num) : 1;
+}
+
+function withScheduleBounds<T extends Exclude<HabitSchedule, { kind: "none" }>>(
+  base: T,
+  interval: number,
+  start: string | undefined,
+  end: string | undefined
+): T {
+  const result: T = { ...base };
+  if (interval > 1) result.interval = interval;
+  if (start) result.start = start;
+  if (end) result.end = end;
+  return result;
+}
+
 /**
  * TaskChute のルーチン設定から、予定日の決め方を読む。
- * 設定が無いとき、種類がわからないとき、曜日や日付が無い weekly / monthly は none（枠を付けない）。
- * routine_interval や開始・終了日は見ない。
+ * routine_enabled が false、設定が無い、種類がわからない、曜日や日付が無い weekly / monthly は none（枠を付けない）。
+ * routine_interval・routine_start・routine_end も合わせて読む（TaskChute Plus 本体と同じ判定にする）。
  */
 export function readHabitSchedule(data: Record<string, unknown> | undefined): HabitSchedule {
+  if (data?.routine_enabled === false) return { kind: "none" };
+  const interval = readRoutineInterval(data?.routine_interval);
+  const start = readDateKey(data?.routine_start) || undefined;
+  const end = readDateKey(data?.routine_end) || undefined;
+
   const type = readRoutineType(data?.routine_type);
-  if (type === "daily") return { kind: "daily" };
-  if (type === "weekdays") return { kind: "weekly", weekdays: [1, 2, 3, 4, 5] };
-  if (type === "weekends") return { kind: "weekly", weekdays: [0, 6] };
+  if (type === "daily") return withScheduleBounds({ kind: "daily" }, interval, start, end);
+  if (type === "weekdays") {
+    return withScheduleBounds({ kind: "weekly", weekdays: [1, 2, 3, 4, 5] }, interval, start, end);
+  }
+  if (type === "weekends") {
+    return withScheduleBounds({ kind: "weekly", weekdays: [0, 6] }, interval, start, end);
+  }
   if (type === "weekly") {
     const weekdays = readRoutineWeekdays(data);
-    return weekdays.length > 0 ? { kind: "weekly", weekdays } : { kind: "none" };
+    return weekdays.length > 0
+      ? withScheduleBounds({ kind: "weekly", weekdays }, interval, start, end)
+      : { kind: "none" };
   }
   if (type === "monthly_date") {
     const days = readMonthDays(data);
-    return days.length > 0 ? { kind: "monthDate", days } : { kind: "none" };
+    return days.length > 0
+      ? withScheduleBounds({ kind: "monthDate", days }, interval, start, end)
+      : { kind: "none" };
   }
   if (type === "monthly") {
     const weeks = readMonthWeeks(data);
@@ -303,7 +345,9 @@ export function readHabitSchedule(data: Record<string, unknown> | undefined): Ha
       "monthly_weekday",
       "weekday",
     ]);
-    return weeks.length > 0 && weekdays.length > 0 ? { kind: "monthNth", weeks, weekdays } : { kind: "none" };
+    return weeks.length > 0 && weekdays.length > 0
+      ? withScheduleBounds({ kind: "monthNth", weeks, weekdays }, interval, start, end)
+      : { kind: "none" };
   }
   return { kind: "none" };
 }
@@ -312,10 +356,32 @@ export function readHabitSchedule(data: Record<string, unknown> | undefined): Ha
 export function isHabitScheduled(schedule: HabitSchedule, dateKey: string): boolean {
   const date = parseDateKey(dateKey);
   if (!date || schedule.kind === "none") return false;
+  if (schedule.start && differenceInCalendarDays(dateKey, schedule.start) < 0) return false;
+  if (schedule.end && differenceInCalendarDays(dateKey, schedule.end) > 0) return false;
+
   const weekday = weekdayOfDateKey(dateKey);
   if (weekday === undefined) return false;
-  if (schedule.kind === "daily") return true;
-  if (schedule.kind === "weekly") return schedule.weekdays.includes(weekday);
+  const interval = Math.max(1, schedule.interval ?? 1);
+
+  if (schedule.kind === "daily") {
+    if (!schedule.start) return interval === 1;
+    const diff = differenceInCalendarDays(dateKey, schedule.start);
+    return diff >= 0 && diff % interval === 0;
+  }
+  if (schedule.kind === "weekly") {
+    const anchorSunday = sundayOfDateKey(schedule.start ?? WEEKLY_EPOCH_SUNDAY);
+    const targetSunday = sundayOfDateKey(dateKey);
+    const diffWeeks = Math.floor(differenceInCalendarDays(targetSunday, anchorSunday) / 7);
+    if (diffWeeks < 0 || diffWeeks % interval !== 0) return false;
+    return schedule.weekdays.includes(weekday);
+  }
+  if (schedule.start) {
+    const startDate = parseDateKey(schedule.start);
+    if (startDate) {
+      const monthDiff = (date.year - startDate.year) * 12 + (date.month - startDate.month);
+      if (monthDiff < 0 || monthDiff % interval !== 0) return false;
+    }
+  }
   if (schedule.kind === "monthDate") {
     const last = lastDayOfMonth(date.year, date.month);
     return schedule.days.some((day) => (day === "last" ? date.day === last : date.day === day));

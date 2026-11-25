@@ -394,6 +394,7 @@ export default class DayspannPlugin extends Plugin {
     // プロジェクトを完了にするとき、完了条件が書いてあれば先に確認する。空なら確認せずに完了にする。
     // 習慣は、完了条件の確認も、ログの「完了」行も出さない。
     const isProject = record.type === "project";
+    const isHabit = record.type === "habit";
     if (archived && isProject && record.goal) {
       const confirmed = await confirmGoalComplete(this.app, record.goal, (key, variables) => this.t(key, variables));
       if (!confirmed) return;
@@ -402,20 +403,32 @@ export default class DayspannPlugin extends Plugin {
       const logLine = `- ${this.todayKey()} 完了`;
       await this.app.vault.process(record.file, (content) => appendLogLineToFile(content, logLine));
     }
+    let routineChanged = false;
     await this.app.fileManager.processFrontMatter(
       record.file,
       (frontmatter: Record<string, unknown>) => {
         if (archived) {
           frontmatter.archived = true;
           frontmatter.completed = this.todayKey();
+          // 習慣をアーカイブしたときは TaskChute 側のルーチンも自動でオフにする。
+          if (isHabit && (frontmatter.isRoutine === true || "routine_enabled" in frontmatter)) {
+            frontmatter.routine_enabled = false;
+            routineChanged = true;
+          }
         } else {
           delete frontmatter.archived;
           delete frontmatter.completed;
+          // 習慣をメイン一覧に戻したときは、オフになっていたルーチンをオンに戻す。
+          if (isHabit && frontmatter.isRoutine === true && frontmatter.routine_enabled === false) {
+            frontmatter.routine_enabled = true;
+            routineChanged = true;
+          }
         }
       }
     );
     new Notice(this.t(archived ? "notice.archived" : "notice.restored"));
     await this.refreshViewsAfterWrite(record.file.path);
+    if (routineChanged) this.reloadTaskChuteViewNow();
   }
 
   async postponeRecord(record: DayspannRecord, days: number): Promise<void> {
@@ -473,6 +486,34 @@ export default class DayspannPlugin extends Plugin {
     await this.reloadTaskChuteView(record.file, today);
   }
 
+  /** 次回予定日（frontmatter の target_date）を変更または空にする。 */
+  async setRecordTargetDate(record: DayspannRecord, dateKey: string): Promise<void> {
+    const trimmed = dateKey.trim();
+    if (trimmed && !parseDateKey(trimmed)) return;
+    if (trimmed && differenceInCalendarDays(trimmed, this.todayKey()) < 0) {
+      new Notice(this.t("error.dateBeforeToday"));
+      return;
+    }
+    await this.app.fileManager.processFrontMatter(
+      record.file,
+      (frontmatter: Record<string, unknown>) => {
+        frontmatter.target_date = trimmed;
+      }
+    );
+    if (trimmed) {
+      new Notice(
+        this.t("notice.targetDateSet", {
+          title: displayTitle(record.title),
+          date: formatLocalizedDate(trimmed, this.locale()),
+        })
+      );
+    } else {
+      new Notice(this.t("notice.targetDateCleared", { title: displayTitle(record.title) }));
+    }
+    await this.refreshViewsAfterWrite(record.file.path);
+    await this.reloadTaskChuteView(record.file, trimmed);
+  }
+
   /** TaskChuteの画面が開いているときだけ「今日のタスクを表示」で読み直す。開いていなければ何もしない（勝手に画面を開かない）。 */
   private async reloadTaskChuteView(file: TFile, targetDate: string): Promise<void> {
     const host = this.app as unknown as TaskChuteHost;
@@ -484,7 +525,7 @@ export default class DayspannPlugin extends Plugin {
 
   private waitForTargetDate(file: TFile, targetDate: string, timeoutMs: number): Promise<void> {
     const cached = () =>
-      readTargetDate(this.app.metadataCache.getFileCache(file)?.frontmatter?.target_date) === targetDate;
+      (readTargetDate(this.app.metadataCache.getFileCache(file)?.frontmatter?.target_date) ?? "") === targetDate;
     if (cached()) return Promise.resolve();
     return new Promise((resolve) => {
       const ref = this.app.metadataCache.on("changed", (changedFile) => {
@@ -1237,9 +1278,8 @@ export default class DayspannPlugin extends Plugin {
     return path === folder || path.startsWith(`${folder}/`);
   }
 
-  /** 習慣のタブを出しているときだけ、TaskChute のログの変更で読み直す。 */
+  /** TaskChute のログの変更で読み直す（習慣のヒートマップと、プロジェクトの「今日やった」進捗の両方で使う）。 */
   private isTaskChuteLogPath(path: string): boolean {
-    if (this.settings.activeTab !== "habit") return false;
     const folder = getTaskChuteLogFolder(this.app as unknown as TaskChuteHost);
     return path.startsWith(`${folder}/`) && (path.endsWith("-tasks.json") || path.endsWith(".jsonl"));
   }

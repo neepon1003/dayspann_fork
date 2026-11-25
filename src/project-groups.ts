@@ -47,12 +47,63 @@ export interface InTodayProgress {
   doneToday: number;
 }
 
-/** 「今日やる」見出し用。残りは今日の一覧、完了は今日完了したプロジェクト全部。 */
-export function countInTodayProgress(records: ProjectGroupRecord[], todayKey: string): InTodayProgress {
-  return {
-    remaining: records.filter((record) => isInTodayList(record, todayKey)).length,
-    doneToday: countCompletedToday(records, todayKey),
-  };
+/**
+ * 「今日やる」見出し用。
+ * 残りは「今日の一覧に入っていて、今日まだ TaskChute で実行していない数」。
+ * 完了は「今日アーカイブ完了した、または今日 TaskChute で実行したプロジェクトの数」（重複は数えない）。
+ */
+export function countInTodayProgress<T extends ProjectGroupRecord>(
+  records: T[],
+  todayKey: string,
+  isWorkedToday: (record: T) => boolean = () => false
+): InTodayProgress {
+  let remaining = 0;
+  let doneToday = 0;
+  for (const record of records) {
+    const worked = !record.archived && isWorkedToday(record);
+    const archivedToday = record.archived && record.completed === todayKey;
+    if (archivedToday || worked) {
+      doneToday += 1;
+      continue;
+    }
+    if (isInTodayList(record, todayKey)) {
+      remaining += 1;
+    }
+  }
+  return { remaining, doneToday };
+}
+
+/** 未来の次回予定日（target_date）が予約済みなら true。予約済みのカードには停滞マークを出さない。 */
+export function hasFutureTargetDate(record: ProjectGroupRecord, todayKey: string): boolean {
+  const target = record.taskchute?.targetDate;
+  if (!target || !parseDateKey(target)) return false;
+  return differenceInCalendarDays(target, todayKey) > 0;
+}
+
+export type NextDateBadgeModel =
+  | { kind: "future"; appearance: "scheduled"; dateKey: string; days: number }
+  | { kind: "past"; appearance: "overdue"; dateKey: string; days: number }
+  | { kind: "none"; appearance: "muted" };
+
+/**
+ * カードに出す「次回予定日（target_date）」のバッジ情報。
+ * アーカイブ済み、TaskChute 非連携、または「今日やる（target_date === 今日）」のカードには出さない。
+ */
+export function buildNextDateBadge(
+  record: ProjectGroupRecord,
+  todayKey: string
+): NextDateBadgeModel | null {
+  if (record.archived || !record.taskchute) return null;
+  const target = record.taskchute.targetDate;
+  if (!target || !parseDateKey(target)) {
+    return { kind: "none", appearance: "muted" };
+  }
+  const diff = differenceInCalendarDays(target, todayKey);
+  if (diff === 0) return null;
+  if (diff > 0) {
+    return { kind: "future", appearance: "scheduled", dateKey: target, days: diff };
+  }
+  return { kind: "past", appearance: "overdue", dateKey: target, days: Math.abs(diff) };
 }
 
 /** 残りも今日の完了も 0 のときだけ、「今日やる」見出しを出さない。 */
@@ -112,11 +163,13 @@ export interface ProjectGroups<T extends ProjectGroupRecord> {
 
 /**
  * 完了していない、かつ今日の一覧に入っているカードを「今日やる」へ。期日順・期日なしには出さない。
- * 完了したカードはアーカイブへ。今日やる・期日順の並びは compareProjectByDue。
+ * 完了したカードはアーカイブへ。
+ * 今日やるの中は「今日まだ」を上、「今日やった」を下にし、同じ状態なら compareProjectByDue。
  */
 export function partitionProjectGroups<T extends ProjectGroupRecord>(
   records: T[],
-  todayKey: string
+  todayKey: string,
+  isWorkedToday: (record: T) => boolean = () => false
 ): ProjectGroups<T> {
   const inToday: T[] = [];
   const dated: T[] = [];
@@ -134,7 +187,12 @@ export function partitionProjectGroups<T extends ProjectGroupRecord>(
     if (parseDateKey(record.date)) dated.push(record);
     else undated.push(record);
   }
-  inToday.sort((left, right) => compareProjectByDue(left, right, todayKey));
+  inToday.sort((left, right) => {
+    const leftWorked = isWorkedToday(left) ? 1 : 0;
+    const rightWorked = isWorkedToday(right) ? 1 : 0;
+    if (leftWorked !== rightWorked) return leftWorked - rightWorked;
+    return compareProjectByDue(left, right, todayKey);
+  });
   dated.sort((left, right) => compareProjectByDue(left, right, todayKey));
   undated.sort((left, right) => left.title.localeCompare(right.title));
   archived.sort((left, right) =>

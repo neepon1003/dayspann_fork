@@ -645,6 +645,90 @@
   outline-offset: 2px;
 }
 
+/* 今日 TaskChute で実行済みのカード：緑の「✓ 今日やった」ピルにし、カード全体を少し落ち着かせる。 */
+.dayspann-card.dayspann-card--worked-today {
+  opacity: 0.78;
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--worked,
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--worked,
+.dayspann-view .dayspann-project-line-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--worked:hover,
+.dayspann-view .dayspann-card-actions button.dayspann-today-button:not(.clickable-icon).dayspann-today-button--worked:hover {
+  border-color: var(--color-green, #22c55e);
+  background: var(--color-green, #22c55e);
+  background-color: var(--color-green, #22c55e);
+  color: #fff;
+}
+
+/* カード左下の「次回予定日（target_date）」ピル。左寄せにして右側のボタン群と距離を取る。 */
+.dayspann-view .dayspann-project-line-actions button.dayspann-next-date-badge:not(.clickable-icon),
+.dayspann-view .dayspann-card-actions button.dayspann-next-date-badge:not(.clickable-icon) {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 1 auto;
+  box-sizing: border-box;
+  height: 22px;
+  min-height: 22px;
+  max-width: 100%;
+  margin-right: auto;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  background-color: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-next-date-badge:not(.clickable-icon):hover,
+.dayspann-view .dayspann-card-actions button.dayspann-next-date-badge:not(.clickable-icon):hover {
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-next-date-badge:not(.clickable-icon).is-scheduled,
+.dayspann-view .dayspann-card-actions button.dayspann-next-date-badge:not(.clickable-icon).is-scheduled {
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  background-color: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  color: var(--text-normal);
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-next-date-badge:not(.clickable-icon).is-overdue,
+.dayspann-view .dayspann-card-actions button.dayspann-next-date-badge:not(.clickable-icon).is-overdue {
+  background: color-mix(in srgb, var(--dayspann-past-color, #ef4444) 16%, transparent);
+  background-color: color-mix(in srgb, var(--dayspann-past-color, #ef4444) 16%, transparent);
+  color: var(--dayspann-past-color, #ef4444);
+}
+
+.dayspann-view .dayspann-project-line-actions button.dayspann-next-date-badge:not(.clickable-icon).is-muted,
+.dayspann-view .dayspann-card-actions button.dayspann-next-date-badge:not(.clickable-icon).is-muted {
+  color: var(--text-faint);
+}
+
+.dayspann-next-date-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+.dayspann-next-date-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.dayspann-next-date-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dayspann-empty {
   max-width: 520px;
   margin: 70px auto;
@@ -1212,9 +1296,11 @@
 /* 「今日やる」「完了」は本文の下、カード右下の右寄せ行。本文と横並びにして切らない。 */
 .dayspann-project-action-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   margin-top: 6px;
