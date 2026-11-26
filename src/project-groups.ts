@@ -11,6 +11,36 @@ import {
 export const PROJECT_FILTER_ALL = "*";
 export const PROJECT_FILTER_UNCATEGORIZED = "";
 
+/** プロジェクト分類の既定の並び順。ここに無い分類は後ろに名前順で並ぶ。 */
+export const DEFAULT_PROJECT_CATEGORY_ORDER = ["個人", "家庭", "仕事"];
+export const DEFAULT_PROJECT_CATEGORY_ORDER_TEXT = DEFAULT_PROJECT_CATEGORY_ORDER.join(", ");
+
+/** プロジェクト分類ごとのカード色（左端の帯・うっすら背景・分類ピルに使う）。 */
+export const DEFAULT_PROJECT_CATEGORY_COLORS: Record<string, string> = {
+  個人: "#ef4444",
+  家庭: "#eab308",
+  家族: "#eab308",
+  仕事: "#3b82f6",
+};
+
+/** カンマ・読点区切りの分類並び順テキストを配列にする。 */
+export function parseProjectCategoryOrder(raw: string | undefined): string[] {
+  if (typeof raw !== "string") return [...DEFAULT_PROJECT_CATEGORY_ORDER];
+  const result: string[] = [];
+  for (const part of raw.split(/[,、]/)) {
+    const trimmed = part.trim();
+    if (trimmed && !result.includes(trimmed)) result.push(trimmed);
+  }
+  return result;
+}
+
+/** 分類名に対応するカード色を返す。未定義の分類は null。 */
+export function resolveProjectCategoryColor(category: string | undefined): string | null {
+  const key = category?.trim() ?? "";
+  if (!key) return null;
+  return DEFAULT_PROJECT_CATEGORY_COLORS[key] ?? null;
+}
+
 /** プロジェクトの見出し分けと件数に使う、記録の一部分。 */
 export interface ProjectGroupRecord {
   title: string;
@@ -22,10 +52,14 @@ export interface ProjectGroupRecord {
 }
 
 /**
- * プロジェクトで使われている分類を集める（日本語辞書順）。
+ * プロジェクトで使われている分類を集める。
+ * preferredOrder に含まれる分類をその順で先に並べ、残りは日本語辞書順にする。
  * 未アーカイブのプロジェクトに分類が空のものがあれば hasUncategorized を true にする。
  */
-export function collectProjectCategories(records: ProjectGroupRecord[]): {
+export function collectProjectCategories(
+  records: ProjectGroupRecord[],
+  preferredOrder: readonly string[] = DEFAULT_PROJECT_CATEGORY_ORDER
+): {
   categories: string[];
   hasUncategorized: boolean;
 } {
@@ -37,7 +71,13 @@ export function collectProjectCategories(records: ProjectGroupRecord[]): {
     if (category) names.add(category);
     else hasUncategorized = true;
   }
-  const categories = [...names].sort((a, b) => a.localeCompare(b, "ja"));
+  const rankOf = (name: string): number => {
+    const index = preferredOrder.indexOf(name);
+    return index >= 0 ? index : preferredOrder.length;
+  };
+  const categories = [...names].sort(
+    (a, b) => rankOf(a) - rankOf(b) || a.localeCompare(b, "ja")
+  );
   return { categories, hasUncategorized };
 }
 

@@ -97,9 +97,11 @@ import {
   filterProjectsByCategory,
   hasFutureTargetDate,
   isInTodayList,
+  parseProjectCategoryOrder,
   partitionProjectGroups,
   PROJECT_FILTER_ALL,
   PROJECT_FILTER_UNCATEGORIZED,
+  resolveProjectCategoryColor,
   resolveProjectCategoryFilter,
   shouldShowInTodaySection,
 } from "../src/project-groups";
@@ -2969,14 +2971,19 @@ test("applyHabitToProjectTransition disables routine and inherits next target_da
 test("collectProjectCategories, filterProjectsByCategory, and resolveProjectCategoryFilter work independently", () => {
   const records = [
     { title: "案件A", date: "2026-12-01", archived: false, category: "仕事" },
-    { title: "音楽会", date: "2026-11-28", archived: false, category: "家族" },
+    { title: "音楽会", date: "2026-11-28", archived: false, category: "家庭" },
     { title: "動画視聴", date: "2026-12-05", archived: false, category: "個人" },
+    { title: "趣味案件", date: "2026-12-10", archived: false, category: "趣味" },
     { title: "未分類", date: "", archived: false, category: "" },
     { title: "完了済み", date: "2026-11-10", archived: true, category: "旧カテゴリ" },
   ];
-  const collected = collectProjectCategories(records);
-  assert.deepEqual(collected.categories, ["家族", "個人", "仕事"]);
+  const collected = collectProjectCategories(records, parseProjectCategoryOrder("個人, 家庭, 仕事"));
+  assert.deepEqual(collected.categories, ["個人", "家庭", "仕事", "趣味"]);
   assert.equal(collected.hasUncategorized, true);
+  assert.equal(resolveProjectCategoryColor("個人"), "#ef4444");
+  assert.equal(resolveProjectCategoryColor("家庭"), "#eab308");
+  assert.equal(resolveProjectCategoryColor("仕事"), "#3b82f6");
+  assert.equal(resolveProjectCategoryColor("趣味"), null);
 
   assert.equal(
     resolveProjectCategoryFilter("仕事", collected.categories, collected.hasUncategorized),
@@ -2997,7 +3004,7 @@ test("collectProjectCategories, filterProjectsByCategory, and resolveProjectCate
 
   assert.deepEqual(
     filterProjectsByCategory(records, PROJECT_FILTER_ALL).map((r) => r.title),
-    ["案件A", "音楽会", "動画視聴", "未分類", "完了済み"]
+    ["案件A", "音楽会", "動画視聴", "趣味案件", "未分類", "完了済み"]
   );
   assert.deepEqual(
     filterProjectsByCategory(records, "仕事").map((r) => r.title),

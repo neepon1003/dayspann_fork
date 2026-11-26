@@ -36,9 +36,11 @@ import {
   countProjectSummary,
   filterProjectsByCategory,
   hasFutureTargetDate,
+  parseProjectCategoryOrder,
   partitionProjectGroups,
   PROJECT_FILTER_ALL,
   PROJECT_FILTER_UNCATEGORIZED,
+  resolveProjectCategoryColor,
   resolveProjectCategoryFilter,
   shouldShowInTodaySection,
   type InTodayProgress,
@@ -190,7 +192,10 @@ export class DayspannView extends ItemView {
       this.renderHabits(root, heading, records, today, habitLogs ?? {});
       return;
     }
-    const { categories: projectCategories, hasUncategorized } = collectProjectCategories(records);
+    const { categories: projectCategories, hasUncategorized } = collectProjectCategories(
+      records,
+      parseProjectCategoryOrder(this.plugin.settings.projectCategoryOrder)
+    );
     const activeProjectFilter = resolveProjectCategoryFilter(
       this.plugin.settings.projectCategoryFilter,
       projectCategories,
@@ -1123,6 +1128,11 @@ export class DayspannView extends ItemView {
     }
     const card = list.createDiv("dayspann-card");
     this.setFlipKey(card, cardFlipKey(record.file.path));
+    const categoryColor = !record.archived ? resolveProjectCategoryColor(record.category) : null;
+    if (categoryColor) {
+      card.addClass("dayspann-card--has-category");
+      card.setCssProps({ "--dayspann-category-color": categoryColor });
+    }
     const workedToday = !record.archived && Boolean(item.workedToday);
     if (workedToday) {
       card.addClass("dayspann-card--worked-today");

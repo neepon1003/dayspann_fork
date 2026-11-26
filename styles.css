@@ -762,6 +762,18 @@
   white-space: nowrap;
 }
 
+/* プロジェクト分類ごとのカード色（左端のカラー帯＋うっすら背景＋分類ピル）。 */
+.dayspann-card.dayspann-card--has-category {
+  background: color-mix(in srgb, var(--dayspann-category-color) 8%, var(--background-secondary));
+  box-shadow: inset 3px 0 0 var(--dayspann-category-color);
+}
+
+.dayspann-card.dayspann-card--has-category .dayspann-project-category {
+  border-color: color-mix(in srgb, var(--dayspann-category-color) 45%, transparent);
+  background: color-mix(in srgb, var(--dayspann-category-color) 16%, transparent);
+  color: color-mix(in srgb, var(--dayspann-category-color) 80%, var(--text-normal));
+}
+
 .dayspann-empty {
   max-width: 520px;
   margin: 70px auto;

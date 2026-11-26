@@ -141,7 +141,7 @@ import {
   prepareHabitMemoInput,
 } from "./src/habit-memo";
 import { displayTitle } from "./src/note-template";
-import { PROJECT_FILTER_ALL } from "./src/project-groups";
+import { DEFAULT_PROJECT_CATEGORY_ORDER_TEXT, PROJECT_FILTER_ALL } from "./src/project-groups";
 import { RefreshCoalescer } from "./src/refresh-coalesce";
 import { DAYSPANN_VIEW_TYPE, DayspannView } from "./src/view";
 
@@ -161,6 +161,8 @@ export interface DayspannSettings {
   habitFilter: HabitFilter;
   /** プロジェクトタブの分類絞り込み。「*」はすべて、"" はその他、それ以外は分類名。 */
   projectCategoryFilter: string;
+  /** プロジェクト分類フィルターの並び順（カンマ区切り）。 */
+  projectCategoryOrder: string;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;
   /** 習慣カードに「今日やった」ボタンを出すか。TaskChute 側だけで実行を記録するときはオフ。 */
@@ -186,6 +188,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   collapsedHabitGroups: [],
   habitFilter: "all",
   projectCategoryFilter: PROJECT_FILTER_ALL,
+  projectCategoryOrder: DEFAULT_PROJECT_CATEGORY_ORDER_TEXT,
   activeTab: DEFAULT_RECORD_TYPE,
   habitLogButtonEnabled: false,
   habitQuickAddChoice: "",
@@ -1314,6 +1317,10 @@ export default class DayspannPlugin extends Plugin {
         typeof saved?.projectCategoryFilter === "string"
           ? saved.projectCategoryFilter
           : PROJECT_FILTER_ALL,
+      projectCategoryOrder:
+        typeof saved?.projectCategoryOrder === "string" && saved.projectCategoryOrder.trim()
+          ? saved.projectCategoryOrder.trim()
+          : DEFAULT_PROJECT_CATEGORY_ORDER_TEXT,
       activeTab: normalizeRecordType(saved?.activeTab),
       habitLogButtonEnabled:
         typeof saved?.habitLogButtonEnabled === "boolean"
@@ -1645,6 +1652,18 @@ class DayspannSettingTab extends PluginSettingTab {
         ],
       },
       {
+        name: this.plugin.t("setting.projectCategoryOrder"),
+        desc: this.plugin.t("setting.projectCategoryOrderDesc"),
+        render: (setting) => {
+          setting.addText((text) => {
+            text
+              .setPlaceholder(DEFAULT_PROJECT_CATEGORY_ORDER_TEXT)
+              .setValue(this.plugin.settings.projectCategoryOrder)
+              .onChange((value) => void this.setProjectCategoryOrder(value));
+          });
+        },
+      },
+      {
         name: this.plugin.t("setting.habitLogButton"),
         desc: this.plugin.t("setting.habitLogButtonDesc"),
         render: (setting) => {
@@ -1739,6 +1758,12 @@ class DayspannSettingTab extends PluginSettingTab {
   private async setHabitQuickAddChoice(value: string): Promise<void> {
     this.plugin.settings.habitQuickAddChoice = normalizeQuickAddChoiceName(value);
     await this.plugin.saveSettings();
+  }
+
+  private async setProjectCategoryOrder(value: string): Promise<void> {
+    this.plugin.settings.projectCategoryOrder = value.trim() || DEFAULT_PROJECT_CATEGORY_ORDER_TEXT;
+    await this.plugin.saveSettings();
+    await this.plugin.refreshViews();
   }
 
   private async setHabitLogButtonEnabled(value: boolean): Promise<void> {
