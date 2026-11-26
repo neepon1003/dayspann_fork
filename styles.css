@@ -762,14 +762,17 @@
   white-space: nowrap;
 }
 
-/* プロジェクト分類ごとのカード色（左端のカラー帯＋分類ピルのみ。背景ティントや期日近いオレンジ枠と混ざらないようにする）。 */
+/* プロジェクト分類ごとのカード色（左端のカラー帯＋分類ピルのみ）。
+   期日超過の赤枠以外は枠線・背景の混色を 0% にして、色が混ざらないようにする。 */
 .dayspann-card.dayspann-card--has-category {
   box-shadow: inset 3px 0 0 var(--dayspann-category-color);
 }
 
-.dayspann-card.dayspann-card--has-category.dayspann-card--soon {
-  border-color: var(--background-modifier-border);
-  background: var(--background-primary);
+.dayspann-card.dayspann-card--has-category:not(.dayspann-card--overdue) {
+  --dayspann-card-border-mix: 0%;
+  --dayspann-card-fill-mix: 0%;
+  --dayspann-card-border-mix-hover: 0%;
+  --dayspann-card-fill-mix-hover: 0%;
 }
 
 .dayspann-card.dayspann-card--has-category .dayspann-project-category {
