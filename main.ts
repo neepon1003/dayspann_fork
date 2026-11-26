@@ -410,7 +410,7 @@ export default class DayspannPlugin extends Plugin {
         if (previousType === "project" && nextType === "habit" && record.taskchute) {
           void this.openHabitRoutineModal(
             { ...record, type: "habit", title: draft.title },
-            { initialStartDate: initialRoutineStart, clearTargetDateOnSave: true }
+            { initialStartDate: initialRoutineStart, clearTargetDateOnSave: true, forceEnabled: true }
           );
         }
       }
@@ -527,7 +527,7 @@ export default class DayspannPlugin extends Plugin {
    */
   async openHabitRoutineModal(
     record: DayspannRecord,
-    options?: { initialStartDate?: string; clearTargetDateOnSave?: boolean }
+    options?: { initialStartDate?: string; clearTargetDateOnSave?: boolean; forceEnabled?: boolean }
   ): Promise<void> {
     const host = this.app as unknown as TaskChuteHost;
     if (!isTaskChuteEnabled(host)) {
@@ -550,15 +550,18 @@ export default class DayspannPlugin extends Plugin {
         ? `${String(Number(timeMatch[1])).padStart(2, "0")}:${timeMatch[2]}`
         : "";
     const today = this.todayKey();
+    const effectiveFm = options?.forceEnabled ? { ...fm, routine_enabled: true } : fm;
     const task: Record<string, unknown> = {
       file,
       path: file.path,
       isRoutine: fm.isRoutine === true || fm.isRoutine === "true",
-      frontmatter: fm,
+      frontmatter: effectiveFm,
       displayTitle: typeof fm.title === "string" && fm.title.trim() ? fm.title.trim() : file.basename,
       routine_type: typeof fm.routine_type === "string" && fm.routine_type.trim() ? fm.routine_type.trim() : "daily",
       routine_interval: typeof fm.routine_interval === "number" && fm.routine_interval >= 1 ? fm.routine_interval : 1,
-      routine_enabled: fm.routine_enabled !== false && fm.routine_enabled !== "false",
+      routine_enabled: options?.forceEnabled
+        ? true
+        : fm.routine_enabled !== false && fm.routine_enabled !== "false",
       routine_start: readDateKey(fm.routine_start) || options?.initialStartDate || today,
     };
     const endKey = readDateKey(fm.routine_end);
