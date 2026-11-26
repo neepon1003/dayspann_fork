@@ -1157,6 +1157,9 @@ export class DayspannView extends ItemView {
         menu.addItem((menuItem) =>
           menuItem.setTitle(this.plugin.t("action.postponeWeek")).setIcon("calendar-plus").onClick(() => void this.plugin.postponeRecord(record, 7))
         );
+        menu.addItem((menuItem) =>
+          menuItem.setTitle(this.plugin.t("action.postponeMonth")).setIcon("calendar-clock").onClick(() => void this.plugin.postponeRecordMonths(record, 1))
+        );
         menu.addSeparator();
       }
       menu.addItem((menuItem) =>

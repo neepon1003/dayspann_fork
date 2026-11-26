@@ -17,6 +17,7 @@ import {
   TFolder,
 } from "obsidian";
 import {
+  addMonthsClamped,
   differenceInCalendarDays,
   formatLocalizedDate,
   parseDateKey,
@@ -474,6 +475,23 @@ export default class DayspannPlugin extends Plugin {
         const currentDate = readDateKey(frontmatter.date);
         if (!currentDate) return;
         nextDate = shiftDateKey(currentDate, days);
+        frontmatter.date = nextDate;
+      }
+    );
+    if (!nextDate) return;
+    new Notice(this.t("notice.postponed", { date: formatLocalizedDate(nextDate, this.locale()) }));
+    await this.refreshViewsAfterWrite(record.file.path);
+  }
+
+  /** 期日（frontmatter の date）を暦月で months か月後へ延ばす（月末は翌月末に丸める）。 */
+  async postponeRecordMonths(record: DayspannRecord, months: number): Promise<void> {
+    let nextDate = "";
+    await this.app.fileManager.processFrontMatter(
+      record.file,
+      (frontmatter: Record<string, unknown>) => {
+        const currentDate = readDateKey(frontmatter.date);
+        if (!currentDate) return;
+        nextDate = addMonthsClamped(currentDate, months);
         frontmatter.date = nextDate;
       }
     );
