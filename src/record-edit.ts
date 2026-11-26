@@ -28,7 +28,8 @@ export function applyDraftToFrontmatter(
     if (goal) frontmatter.goal = goal;
     else delete frontmatter.goal;
     if (draft.displayMode) frontmatter.display = draft.displayMode;
-  } else {
+  }
+  if (draft.category !== undefined) {
     const category = readCategory(draft.category);
     if (category) frontmatter.category = category;
     else delete frontmatter.category;

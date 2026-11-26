@@ -729,6 +729,39 @@
   text-overflow: ellipsis;
 }
 
+/* プロジェクトの分類絞り込みバー（複数分類があっても折り返せるようにする）。 */
+.dayspann-project-filter {
+  flex-wrap: wrap;
+}
+
+/* カード左下の「分類」＋「次回予定日」をまとめる左寄せブロック。 */
+.dayspann-project-left-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.dayspann-project-left-meta button.dayspann-next-date-badge:not(.clickable-icon) {
+  margin-right: 0;
+}
+
+.dayspann-project-category {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .dayspann-empty {
   max-width: 520px;
   margin: 70px auto;

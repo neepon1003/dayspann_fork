@@ -141,6 +141,7 @@ import {
   prepareHabitMemoInput,
 } from "./src/habit-memo";
 import { displayTitle } from "./src/note-template";
+import { PROJECT_FILTER_ALL } from "./src/project-groups";
 import { RefreshCoalescer } from "./src/refresh-coalesce";
 import { DAYSPANN_VIEW_TYPE, DayspannView } from "./src/view";
 
@@ -158,6 +159,8 @@ export interface DayspannSettings {
   collapsedHabitGroups: string[];
   /** 習慣タブの表示。「今日」か「すべて」。再起動しても残る。 */
   habitFilter: HabitFilter;
+  /** プロジェクトタブの分類絞り込み。「*」はすべて、"" はその他、それ以外は分類名。 */
+  projectCategoryFilter: string;
   /** 最後に選んだタブ（プロジェクト・習慣）。 */
   activeTab: RecordType;
   /** 習慣カードに「今日やった」ボタンを出すか。TaskChute 側だけで実行を記録するときはオフ。 */
@@ -182,6 +185,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   archiveCollapsed: true,
   collapsedHabitGroups: [],
   habitFilter: "all",
+  projectCategoryFilter: PROJECT_FILTER_ALL,
   activeTab: DEFAULT_RECORD_TYPE,
   habitLogButtonEnabled: false,
   habitQuickAddChoice: "",
@@ -1277,6 +1281,11 @@ export default class DayspannPlugin extends Plugin {
     await this.saveSettings();
   }
 
+  async setProjectCategoryFilter(filter: string): Promise<void> {
+    this.settings.projectCategoryFilter = filter;
+    await this.saveSettings();
+  }
+
   private async loadSettings(): Promise<void> {
     const saved = (await this.loadData()) as Partial<DayspannSettings> | null;
     const savedStorageFolder = saved?.storageFolder?.trim();
@@ -1301,6 +1310,10 @@ export default class DayspannPlugin extends Plugin {
       archiveCollapsed: saved?.archiveCollapsed ?? DEFAULT_SETTINGS.archiveCollapsed,
       collapsedHabitGroups: normalizeCollapsedHabitGroups(saved?.collapsedHabitGroups),
       habitFilter: normalizeHabitFilter(saved?.habitFilter),
+      projectCategoryFilter:
+        typeof saved?.projectCategoryFilter === "string"
+          ? saved.projectCategoryFilter
+          : PROJECT_FILTER_ALL,
       activeTab: normalizeRecordType(saved?.activeTab),
       habitLogButtonEnabled:
         typeof saved?.habitLogButtonEnabled === "boolean"

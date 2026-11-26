@@ -305,6 +305,7 @@ export class DayspannEntryModal extends Modal {
   private errorEl?: HTMLElement;
   private nameInput?: HTMLInputElement;
   private nextActionInput?: HTMLInputElement;
+  private categoryDatalist?: HTMLDataListElement;
 
   constructor(
     app: App,
@@ -357,21 +358,15 @@ export class DayspannEntryModal extends Modal {
 
     new Setting(contentEl)
       .setName(this.t("modal.category"))
-      .setClass("dayspann-habit-field")
       .setDesc(this.t("modal.categoryDesc"))
       .addText((text) => {
         text.setValue(this.draft.category ?? "").onChange((value) => {
           this.draft.category = value;
         });
-        const suggestions = this.habitCategorySuggestions();
-        if (suggestions.length) {
-          const listId = "dayspann-category-suggestions";
-          const datalist = contentEl.createEl("datalist", { attr: { id: listId } });
-          for (const name of suggestions) {
-            datalist.createEl("option", { attr: { value: name } });
-          }
-          text.inputEl.setAttribute("list", listId);
-        }
+        const listId = "dayspann-category-suggestions";
+        this.categoryDatalist = contentEl.createEl("datalist", { attr: { id: listId } });
+        this.refreshCategorySuggestions();
+        text.inputEl.setAttribute("list", listId);
       });
 
     new Setting(contentEl)
@@ -523,6 +518,17 @@ export class DayspannEntryModal extends Modal {
       if (this.nameInput) this.nameInput.value = this.draft.title;
     }
     this.modalEl.toggleClass("dayspann-entry-modal--habit", isHabit);
+    this.refreshCategorySuggestions();
+  }
+
+  /** 現在の種類（project / habit）で使われている分類を候補リストに反映する。 */
+  private refreshCategorySuggestions(): void {
+    if (!this.categoryDatalist) return;
+    this.categoryDatalist.empty();
+    const targetType = this.draft.type ?? DEFAULT_RECORD_TYPE;
+    for (const name of this.categorySuggestionsFor(targetType)) {
+      this.categoryDatalist.createEl("option", { attr: { value: name } });
+    }
   }
 
   /** 習慣の編集では、名前と次の一手を分けて欄に出す。初期値「プロジェクトノート作成」は空にする。 */
@@ -538,12 +544,12 @@ export class DayspannEntryModal extends Modal {
     this.draft.nextAction = undefined;
   }
 
-  /** すでにある習慣の分類を、入力の候補として集める。 */
-  private habitCategorySuggestions(): string[] {
+  /** 指定した種類（project / habit）ですでにある分類を、入力の候補として集める。 */
+  private categorySuggestionsFor(targetType: "project" | "habit"): string[] {
     const names = new Set<string>();
     for (const file of this.app.vault.getMarkdownFiles()) {
       const data = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      if (!data || readRecordType(data.type) !== "habit") continue;
+      if (!data || readRecordType(data.type) !== targetType) continue;
       const category = readCategory(data.category);
       if (category) names.add(category);
     }

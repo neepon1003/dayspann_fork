@@ -7,13 +7,63 @@ import {
   parseDateKey,
 } from "./date-utils";
 
+/** プロジェクトの分類フィルター。「*」はすべて、"" は未分類（その他）、それ以外は分類名。 */
+export const PROJECT_FILTER_ALL = "*";
+export const PROJECT_FILTER_UNCATEGORIZED = "";
+
 /** プロジェクトの見出し分けと件数に使う、記録の一部分。 */
 export interface ProjectGroupRecord {
   title: string;
   date: string;
   archived: boolean;
   completed?: string;
+  category?: string;
   taskchute?: { targetDate?: string };
+}
+
+/**
+ * プロジェクトで使われている分類を集める（日本語辞書順）。
+ * 未アーカイブのプロジェクトに分類が空のものがあれば hasUncategorized を true にする。
+ */
+export function collectProjectCategories(records: ProjectGroupRecord[]): {
+  categories: string[];
+  hasUncategorized: boolean;
+} {
+  const names = new Set<string>();
+  let hasUncategorized = false;
+  for (const record of records) {
+    if (record.archived) continue;
+    const category = record.category?.trim() ?? "";
+    if (category) names.add(category);
+    else hasUncategorized = true;
+  }
+  const categories = [...names].sort((a, b) => a.localeCompare(b, "ja"));
+  return { categories, hasUncategorized };
+}
+
+/** 保存していた絞り込み値が今の分類一覧に無ければ「すべて」に戻す。 */
+export function resolveProjectCategoryFilter(
+  savedFilter: string,
+  categories: string[],
+  hasUncategorized: boolean
+): string {
+  if (savedFilter === PROJECT_FILTER_ALL) return PROJECT_FILTER_ALL;
+  if (savedFilter === PROJECT_FILTER_UNCATEGORIZED) {
+    return hasUncategorized ? PROJECT_FILTER_UNCATEGORIZED : PROJECT_FILTER_ALL;
+  }
+  return categories.includes(savedFilter) ? savedFilter : PROJECT_FILTER_ALL;
+}
+
+/** 選んだ分類に合うプロジェクトだけを残す。 */
+export function filterProjectsByCategory<T extends ProjectGroupRecord>(
+  records: T[],
+  filter: string
+): T[] {
+  if (filter === PROJECT_FILTER_ALL) return records;
+  if (filter === PROJECT_FILTER_UNCATEGORIZED) {
+    return records.filter((record) => !(record.category?.trim()));
+  }
+  return records.filter((record) => (record.category?.trim() ?? "") === filter);
 }
 
 export interface ProjectSummaryCounts {

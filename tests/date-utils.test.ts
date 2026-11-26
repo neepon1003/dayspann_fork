@@ -90,12 +90,17 @@ import "./smooth-refresh.test";
 import { buildDuePill } from "../src/due-pill";
 import {
   buildNextDateBadge,
+  collectProjectCategories,
   countCompletedToday,
   countInTodayProgress,
   countProjectSummary,
+  filterProjectsByCategory,
   hasFutureTargetDate,
   isInTodayList,
   partitionProjectGroups,
+  PROJECT_FILTER_ALL,
+  PROJECT_FILTER_UNCATEGORIZED,
+  resolveProjectCategoryFilter,
   shouldShowInTodaySection,
 } from "../src/project-groups";
 import { findDuplicates, isActiveProjectOrTask, normalizeNameForCompare, stripDatePrefix } from "../src/duplicate-check";
@@ -1154,10 +1159,18 @@ test("習慣の分類を読み、名前順の見出しにまとめ、編集で�
     title: "企画",
     type: "project",
     date: "2026-12-01",
-    category: "別の分類",
+    category: "家族",
     excerpt: "",
   });
-  assert.equal(projectFrontmatter.category, "仕事");
+  assert.equal(projectFrontmatter.category, "家族");
+  applyDraftToFrontmatter(projectFrontmatter, {
+    title: "企画",
+    type: "project",
+    date: "2026-12-01",
+    category: "  ",
+    excerpt: "",
+  });
+  assert.equal("category" in projectFrontmatter, false);
 
   assert.equal(createTranslator("ja")("section.other"), "その他");
   assert.equal(createTranslator("ja")("modal.category"), "分類");
@@ -2951,4 +2964,47 @@ test("applyHabitToProjectTransition disables routine and inherits next target_da
   // 元の頻度設定は残る（戻しやすい）
   assert.equal(fm.routine_type, "weekly");
   assert.equal(fm.routine_interval, 2);
+});
+
+test("collectProjectCategories, filterProjectsByCategory, and resolveProjectCategoryFilter work independently", () => {
+  const records = [
+    { title: "案件A", date: "2026-12-01", archived: false, category: "仕事" },
+    { title: "音楽会", date: "2026-11-28", archived: false, category: "家族" },
+    { title: "動画視聴", date: "2026-12-05", archived: false, category: "個人" },
+    { title: "未分類", date: "", archived: false, category: "" },
+    { title: "完了済み", date: "2026-11-10", archived: true, category: "旧カテゴリ" },
+  ];
+  const collected = collectProjectCategories(records);
+  assert.deepEqual(collected.categories, ["家族", "個人", "仕事"]);
+  assert.equal(collected.hasUncategorized, true);
+
+  assert.equal(
+    resolveProjectCategoryFilter("仕事", collected.categories, collected.hasUncategorized),
+    "仕事"
+  );
+  assert.equal(
+    resolveProjectCategoryFilter("存在しない", collected.categories, collected.hasUncategorized),
+    PROJECT_FILTER_ALL
+  );
+  assert.equal(
+    resolveProjectCategoryFilter(PROJECT_FILTER_UNCATEGORIZED, collected.categories, true),
+    PROJECT_FILTER_UNCATEGORIZED
+  );
+  assert.equal(
+    resolveProjectCategoryFilter(PROJECT_FILTER_UNCATEGORIZED, collected.categories, false),
+    PROJECT_FILTER_ALL
+  );
+
+  assert.deepEqual(
+    filterProjectsByCategory(records, PROJECT_FILTER_ALL).map((r) => r.title),
+    ["案件A", "音楽会", "動画視聴", "未分類", "完了済み"]
+  );
+  assert.deepEqual(
+    filterProjectsByCategory(records, "仕事").map((r) => r.title),
+    ["案件A"]
+  );
+  assert.deepEqual(
+    filterProjectsByCategory(records, PROJECT_FILTER_UNCATEGORIZED).map((r) => r.title),
+    ["未分類"]
+  );
 });

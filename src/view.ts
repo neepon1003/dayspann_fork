@@ -31,10 +31,15 @@ import {
 import { findPjSpanEntries } from "./habit-record";
 import {
   buildNextDateBadge,
+  collectProjectCategories,
   countInTodayProgress,
   countProjectSummary,
+  filterProjectsByCategory,
   hasFutureTargetDate,
   partitionProjectGroups,
+  PROJECT_FILTER_ALL,
+  PROJECT_FILTER_UNCATEGORIZED,
+  resolveProjectCategoryFilter,
   shouldShowInTodaySection,
   type InTodayProgress,
   type NextDateBadgeModel,
@@ -65,6 +70,7 @@ interface CountedRecord {
   record: DayspannRecord;
   difference: number | null;
   workedToday?: boolean;
+  showCategory?: boolean;
 }
 
 type ViewSectionKind = DayspannSectionKind | "undated" | "archive";
@@ -184,12 +190,20 @@ export class DayspannView extends ItemView {
       this.renderHabits(root, heading, records, today, habitLogs ?? {});
       return;
     }
-    const counted = records.map((record) => ({
+    const { categories: projectCategories, hasUncategorized } = collectProjectCategories(records);
+    const activeProjectFilter = resolveProjectCategoryFilter(
+      this.plugin.settings.projectCategoryFilter,
+      projectCategories,
+      hasUncategorized
+    );
+    const filteredRecords = filterProjectsByCategory(records, activeProjectFilter);
+
+    const counted = filteredRecords.map((record) => ({
       record,
       difference: record.date ? differenceInCalendarDays(record.date, today) : null,
     }));
 
-    const counts = countProjectSummary(records, today);
+    const counts = countProjectSummary(filteredRecords, today);
     const summary = heading.createDiv("dayspann-summary");
     summary.createSpan({
       cls: "dayspann-summary-pill" + (counts.dueThisWeek > 0 ? " is-week" : ""),
@@ -204,7 +218,11 @@ export class DayspannView extends ItemView {
       text: this.plugin.t("view.doneThisMonth", { count: counts.doneThisMonth }),
     });
 
-    if (!counted.length) {
+    if (projectCategories.length > 0) {
+      this.renderProjectCategoryFilter(root, projectCategories, hasUncategorized, activeProjectFilter);
+    }
+
+    if (!records.length) {
       const empty = root.createDiv("dayspann-empty");
       setIcon(empty.createDiv("dayspann-empty-icon"), "calendar-range");
       empty.createEl("h3", { text: this.plugin.t("view.emptyTitle") });
@@ -222,7 +240,7 @@ export class DayspannView extends ItemView {
     // 今日 TaskChute で 1 回でも完了記録があるプロジェクトを集める（「今日やる」の進捗と並び順に使う）。
     const workedTodayPaths = new Set<string>();
     if (habitLogs) {
-      for (const record of records) {
+      for (const record of filteredRecords) {
         if (record.archived || !record.taskchute) continue;
         const logCounts = countHabitDays(habitLogs, {
           taskId: record.taskchute.taskId,
@@ -233,16 +251,19 @@ export class DayspannView extends ItemView {
       }
     }
     const isWorkedToday = (record: DayspannRecord): boolean => workedTodayPaths.has(record.file.path);
+    const showCategoryBadge = activeProjectFilter === PROJECT_FILTER_ALL && projectCategories.length > 0;
 
     // 今日の一覧に入っているカードは「今日やる」へ。期日順・期日なしには出さない。完了はアーカイブへ。
-    const groups = partitionProjectGroups(records, today, isWorkedToday);
-    const inTodayProgress = countInTodayProgress(records, today, isWorkedToday);
+    const groups = partitionProjectGroups(filteredRecords, today, isWorkedToday);
+    const inTodayProgress = countInTodayProgress(filteredRecords, today, isWorkedToday);
     const toCounted = (list: typeof records): CountedRecord[] =>
       list.map((record) => ({
         record,
         difference: parseDateKey(record.date) ? differenceInCalendarDays(record.date, today) : null,
         workedToday: isWorkedToday(record),
+        showCategory: showCategoryBadge,
       }));
+    void counted;
 
     this.renderSection(
       root,
@@ -399,6 +420,38 @@ export class DayspannView extends ItemView {
     const tooltip = this.plugin.t("view.habitTargetsTooltip");
     setTooltip(count, tooltip);
     count.setAttribute("aria-label", tooltip);
+  }
+
+  /** プロジェクトの分類絞り込み（「すべて」「仕事」「家族」「個人」など）。選んだ値は設定に覚える。 */
+  private renderProjectCategoryFilter(
+    root: HTMLElement,
+    categories: string[],
+    hasUncategorized: boolean,
+    current: string
+  ): void {
+    const group = root.createDiv({
+      cls: "dayspann-habit-filter dayspann-project-filter",
+      attr: { role: "radiogroup", "aria-label": this.plugin.t("view.projectFilterLabel") },
+    });
+    const options: Array<{ value: string; label: string }> = [
+      { value: PROJECT_FILTER_ALL, label: this.plugin.t("view.projectFilterAll") },
+      ...categories.map((name) => ({ value: name, label: name })),
+    ];
+    if (hasUncategorized) {
+      options.push({ value: PROJECT_FILTER_UNCATEGORIZED, label: this.plugin.t("section.other") });
+    }
+    for (const option of options) {
+      const button = group.createEl("button", {
+        cls: "dayspann-habit-filter-button",
+        text: option.label,
+        attr: { type: "button", role: "radio", "aria-checked": String(option.value === current) },
+      });
+      if (option.value === current) button.addClass("is-active");
+      button.addEventListener("click", () => {
+        if (option.value === current) return;
+        void this.plugin.setProjectCategoryFilter(option.value).then(() => this.refresh());
+      });
+    }
   }
 
   /** 「今日」と「すべて」を切り替えるボタン。選んだほうは設定に覚えておき、次に開いたときもそのままにする。 */
@@ -1202,7 +1255,9 @@ export class DayspannView extends ItemView {
       ? null
       : stalledDays(record.file.stat.mtime, new Date(), this.plugin.settings.stalledDays);
     const nextDateBadge = buildNextDateBadge(record, todayKey);
-    const hasLineActions = plan.today !== "none" || plan.complete || stalled !== null || nextDateBadge !== null;
+    const categoryLabel = !record.archived && item.showCategory ? record.category.trim() : "";
+    const hasLineActions =
+      plan.today !== "none" || plan.complete || stalled !== null || nextDateBadge !== null || Boolean(categoryLabel);
     if (nextAction) {
       const next = content.createDiv({ cls: "dayspann-card-next" });
       const icon = next.createSpan("dayspann-card-next-icon");
@@ -1218,11 +1273,17 @@ export class DayspannView extends ItemView {
       content.createDiv({ text: excerpt, cls: "dayspann-card-excerpt" });
     }
 
-    // 左に「次回予定日」、右に「今日やる」「完了」を並べる。本文を切らない。「…」は名前の右。
+    // 左に「分類」「次回予定日」、右に「今日やる」「完了」を並べる。本文を切らない。「…」は名前の右。
     if (hasLineActions) {
       const actions = content.createDiv("dayspann-card-actions dayspann-project-line-actions dayspann-project-action-row");
-      if (nextDateBadge) {
-        this.renderNextDateBadge(actions, record, nextDateBadge, todayKey, locale);
+      if (categoryLabel || nextDateBadge) {
+        const leftMeta = actions.createDiv("dayspann-project-left-meta");
+        if (categoryLabel) {
+          leftMeta.createSpan({ text: categoryLabel, cls: "dayspann-project-category" });
+        }
+        if (nextDateBadge) {
+          this.renderNextDateBadge(leftMeta, record, nextDateBadge, todayKey, locale);
+        }
       }
       if (stalled !== null) {
         const mark = actions.createDiv("dayspann-stalled");

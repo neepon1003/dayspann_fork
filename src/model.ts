@@ -80,12 +80,12 @@ export function serializeRecord(draft: DayspannDraft, taskchute?: TaskChuteNewTa
     created: draft.created ?? new Date().toISOString(),
   };
 
+  const category = readCategory(draft.category);
+  if (category) frontmatter.category = category;
   if (frontmatter.type === "habit") {
-    // 習慣には、期日・表示形式・完了条件を書かない。分類があれば書く。
+    // 習慣には、期日・表示形式・完了条件を書かない。
     delete frontmatter.date;
     delete frontmatter.display;
-    const category = readCategory(draft.category);
-    if (category) frontmatter.category = category;
   } else {
     const goal = readGoal(draft.goal);
     if (goal) frontmatter.goal = goal;
