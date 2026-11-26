@@ -78,7 +78,13 @@ import {
   isLinkedSourceReference,
   parseSourceReference,
 } from "../src/source-link";
-import { applyDraftToFrontmatter, emptyRequiredFields, readGoal, replaceRecordBody } from "../src/record-edit";
+import {
+  applyDraftToFrontmatter,
+  applyHabitToProjectTransition,
+  emptyRequiredFields,
+  readGoal,
+  replaceRecordBody,
+} from "../src/record-edit";
 import { planCardActions } from "../src/card-actions";
 import "./smooth-refresh.test";
 import { buildDuePill } from "../src/due-pill";
@@ -2926,4 +2932,23 @@ test("partitionProjectGroups sorts undated projects by next target_date (overdue
     groups.undated.map((r) => r.title),
     ["予定過ぎ", "明日", "1週間後", "予定なしA", "予定なしB"]
   );
+});
+
+test("applyHabitToProjectTransition disables routine and inherits next target_date", () => {
+  const fm: Record<string, unknown> = {
+    type: "project",
+    isRoutine: true,
+    routine_enabled: true,
+    routine_type: "weekly",
+    routine_interval: 2,
+    routine_weekday: 4,
+  };
+  const changed = applyHabitToProjectTransition(fm, "2026-12-03");
+  assert.equal(changed, true);
+  assert.equal(fm.isRoutine, false);
+  assert.equal(fm.routine_enabled, false);
+  assert.equal(fm.target_date, "2026-12-03");
+  // 元の頻度設定は残る（戻しやすい）
+  assert.equal(fm.routine_type, "weekly");
+  assert.equal(fm.routine_interval, 2);
 });

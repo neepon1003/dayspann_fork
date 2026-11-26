@@ -1,3 +1,4 @@
+import { readDateKey } from "./date-utils";
 import { readCategory } from "./habit-category";
 import type { DayspannDraft } from "./model";
 import { buildHabitTitle } from "./note-template";
@@ -59,6 +60,34 @@ export function replaceRecordBody(content: string, body: string): string {
 }
 
 export type EmptyRequiredField = "goal" | "date";
+
+/**
+ * 習慣 → プロジェクトへ種類を変えたときに、TaskChute のルーチン設定を止めて次回予定日を引き継ぐ。
+ * 頻度設定（routine_type・routine_interval など）は消さずに残すので、あとから習慣へ戻しやすい。
+ */
+export function applyHabitToProjectTransition(
+  frontmatter: Record<string, unknown>,
+  inheritedTargetDate?: string | null
+): boolean {
+  let changed = false;
+  if (frontmatter.isRoutine === true || frontmatter.isRoutine === "true") {
+    frontmatter.isRoutine = false;
+    changed = true;
+  }
+  if (
+    frontmatter.routine_enabled !== false &&
+    ("routine_enabled" in frontmatter || "isRoutine" in frontmatter)
+  ) {
+    frontmatter.routine_enabled = false;
+    changed = true;
+  }
+  const inherited = readDateKey(inheritedTargetDate);
+  if (inherited && !readDateKey(frontmatter.target_date)) {
+    frontmatter.target_date = inherited;
+    changed = true;
+  }
+  return changed;
+}
 
 /** 新しく登録するときに確かめる項目のうち、空のもの（完了条件・期日の順）。空白だけのときも空とみなす。習慣は確かめない。 */
 export function emptyRequiredFields(draft: Pick<DayspannDraft, "goal" | "date" | "type">): EmptyRequiredField[] {

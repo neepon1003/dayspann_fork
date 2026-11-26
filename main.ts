@@ -41,7 +41,13 @@ import {
   KeepEntryOpenError,
   promptHabitMemo,
 } from "./src/modals";
-import { applyDraftToFrontmatter, emptyRequiredFields, replaceRecordBody } from "./src/record-edit";
+import {
+  applyDraftToFrontmatter,
+  applyHabitToProjectTransition,
+  emptyRequiredFields,
+  replaceRecordBody,
+} from "./src/record-edit";
+import { nextHabitScheduledDate } from "./src/habit-target";
 import { DEFAULT_RECORD_TYPE, normalizeRecordType, RecordType } from "./src/record-type";
 import {
   collectLogMonthKeys,
@@ -373,14 +379,40 @@ export default class DayspannPlugin extends Plugin {
       this.t("action.save"),
       (key, variables) => this.t(key, variables),
       async (draft) => {
+        const previousType = record.type;
+        const nextType = draft.type ?? previousType;
+        const today = this.todayKey();
+        const inheritedTargetDate =
+          previousType === "habit" && nextType === "project"
+            ? nextHabitScheduledDate(record.habitSchedule, today, false)
+            : null;
+        const previousTargetDate = record.taskchute?.targetDate;
+        const initialRoutineStart =
+          previousTargetDate && differenceInCalendarDays(previousTargetDate, today) >= 0
+            ? previousTargetDate
+            : undefined;
+        let routineStopped = false;
+
         // ファイル全体を書き直さず、PJ-spanのキーと本文だけを変える（TaskChuteの taskId・tags・target_date などを残すため）。
         await this.app.vault.process(record.file, (content) => replaceRecordBody(content, draft.excerpt));
         await this.app.fileManager.processFrontMatter(
           record.file,
-          (frontmatter: Record<string, unknown>) => applyDraftToFrontmatter(frontmatter, draft)
+          (frontmatter: Record<string, unknown>) => {
+            applyDraftToFrontmatter(frontmatter, draft);
+            if (previousType === "habit" && nextType === "project") {
+              routineStopped = applyHabitToProjectTransition(frontmatter, inheritedTargetDate);
+            }
+          }
         );
         new Notice(this.t("notice.updated"));
         await this.refreshViewsAfterWrite(record.file.path);
+        if (routineStopped) this.reloadTaskChuteViewNow();
+        if (previousType === "project" && nextType === "habit" && record.taskchute) {
+          void this.openHabitRoutineModal(
+            { ...record, type: "habit", title: draft.title },
+            { initialStartDate: initialRoutineStart, clearTargetDateOnSave: true }
+          );
+        }
       }
     ).open();
   }
@@ -493,7 +525,10 @@ export default class DayspannPlugin extends Plugin {
    * 習慣カードの「次回予定日」から TaskChute のルーチン設定モーダルを開く。
    * 開始時刻が空のまま保存したときは scheduled_time を空白で残す。
    */
-  async openHabitRoutineModal(record: DayspannRecord): Promise<void> {
+  async openHabitRoutineModal(
+    record: DayspannRecord,
+    options?: { initialStartDate?: string; clearTargetDateOnSave?: boolean }
+  ): Promise<void> {
     const host = this.app as unknown as TaskChuteHost;
     if (!isTaskChuteEnabled(host)) {
       new Notice(this.t("notice.habitLogNoTaskChute"));
@@ -524,7 +559,7 @@ export default class DayspannPlugin extends Plugin {
       routine_type: typeof fm.routine_type === "string" && fm.routine_type.trim() ? fm.routine_type.trim() : "daily",
       routine_interval: typeof fm.routine_interval === "number" && fm.routine_interval >= 1 ? fm.routine_interval : 1,
       routine_enabled: fm.routine_enabled !== false && fm.routine_enabled !== "false",
-      routine_start: readDateKey(fm.routine_start) || today,
+      routine_start: readDateKey(fm.routine_start) || options?.initialStartDate || today,
     };
     const endKey = readDateKey(fm.routine_end);
     if (endKey) task.routine_end = endKey;
@@ -595,10 +630,22 @@ export default class DayspannPlugin extends Plugin {
       finish();
       window.setTimeout(() => {
         void (async () => {
-          if (dropTime) {
+          const shouldClearTarget = Boolean(options?.clearTargetDateOnSave);
+          if (dropTime || shouldClearTarget) {
             await this.app.fileManager.processFrontMatter(file, (nextFm: Record<string, unknown>) => {
-              nextFm.scheduled_time = "";
+              if (dropTime) nextFm.scheduled_time = "";
+              if (
+                shouldClearTarget &&
+                (nextFm.isRoutine === true || nextFm.isRoutine === "true") &&
+                nextFm.routine_enabled !== false &&
+                nextFm.routine_enabled !== "false"
+              ) {
+                delete nextFm.target_date;
+                delete nextFm.temporary_move_date;
+              }
             });
+          }
+          if (dropTime) {
             dismissBlankTimeNotices();
             const noticeCleaner = window.setInterval(dismissBlankTimeNotices, 100);
             window.setTimeout(() => window.clearInterval(noticeCleaner), 2000);
