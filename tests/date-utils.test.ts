@@ -2911,3 +2911,19 @@ test("nextHabitScheduledDate returns next date for daily and interval habits", (
   });
   assert.equal(nextHabitScheduledDate(ended, "2026-11-25", false), null);
 });
+
+test("partitionProjectGroups sorts undated projects by next target_date (overdue -> upcoming -> none)", () => {
+  const today = "2026-11-26";
+  const records = [
+    { title: "予定なしB", date: "", archived: false, taskchute: {} },
+    { title: "1週間後", date: "", archived: false, taskchute: { targetDate: "2026-12-03" } },
+    { title: "予定過ぎ", date: "", archived: false, taskchute: { targetDate: "2026-11-24" } },
+    { title: "明日", date: "", archived: false, taskchute: { targetDate: "2026-11-27" } },
+    { title: "予定なしA", date: "", archived: false, taskchute: {} },
+  ];
+  const groups = partitionProjectGroups(records, today);
+  assert.deepEqual(
+    groups.undated.map((r) => r.title),
+    ["予定過ぎ", "明日", "1週間後", "予定なしA", "予定なしB"]
+  );
+});

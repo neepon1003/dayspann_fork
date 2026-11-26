@@ -154,6 +154,29 @@ export function compareProjectByDue(left: ProjectGroupRecord, right: ProjectGrou
   );
 }
 
+/** 次回予定日（target_date）順。予定過ぎが上、次に近い未来日、予定なしはいちばん下。同じ日なら名前順。 */
+export function compareProjectByTargetDate(
+  left: ProjectGroupRecord,
+  right: ProjectGroupRecord,
+  todayKey: string
+): number {
+  const leftTarget = left.taskchute?.targetDate ?? "";
+  const rightTarget = right.taskchute?.targetDate ?? "";
+  const leftHas = Boolean(parseDateKey(leftTarget));
+  const rightHas = Boolean(parseDateKey(rightTarget));
+  if (!leftHas && !rightHas) return left.title.localeCompare(right.title);
+  if (!leftHas) return 1;
+  if (!rightHas) return -1;
+  return (
+    compareByDueDifference(
+      differenceInCalendarDays(leftTarget, todayKey),
+      leftTarget,
+      differenceInCalendarDays(rightTarget, todayKey),
+      rightTarget
+    ) || left.title.localeCompare(right.title)
+  );
+}
+
 export interface ProjectGroups<T extends ProjectGroupRecord> {
   inToday: T[];
   dated: T[];
@@ -194,7 +217,7 @@ export function partitionProjectGroups<T extends ProjectGroupRecord>(
     return compareProjectByDue(left, right, todayKey);
   });
   dated.sort((left, right) => compareProjectByDue(left, right, todayKey));
-  undated.sort((left, right) => left.title.localeCompare(right.title));
+  undated.sort((left, right) => compareProjectByTargetDate(left, right, todayKey));
   archived.sort((left, right) =>
     compareArchiveOrder(left.completed, right.completed, left.date, right.date)
   );
