@@ -174,16 +174,19 @@ import {
   NEW_NOTE_TOOLBAR,
 } from "../src/note-template";
 import {
+  assignTaskChuteSlotOverride,
   buildTaskChuteFields,
   canReloadTaskChuteView,
   chooseNewRecordFolder,
   generateTaskChuteTaskId,
   getTaskChuteTaskFolder,
+  hasScheduledTime,
   hasTaskTag,
   isTaskChuteEnabled,
   isTaskChuteTask,
   readTargetDate,
   reloadTaskChuteViewIfOpen,
+  resolveCurrentTaskChuteSlotKey,
   TASKCHUTE_DEFAULT_TASK_FOLDER,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
@@ -2559,12 +2562,12 @@ test("ヘッダーの件数は、今週締切・超過・今月完了を、見�
   });
 });
 
-test("今日の一覧に入っているカードは「今日やる」にまとめ、期日順と期日なしには出さない", () => {
+test("今日の一覧に入っているカードも「今日やる」には分けず、期日順と期日なしに並べる", () => {
   const today = "2026-11-20";
   const dated = { title: "期日あり", date: "2026-11-27", archived: false };
   const inTodayDated = {
     title: "今日やる・期日あり",
-    date: "2026-11-27",
+    date: "2026-11-26",
     archived: false,
     taskchute: { targetDate: today },
   };
@@ -2584,7 +2587,7 @@ test("今日の一覧に入っているカードは「今日やる」にまと�
   };
   const otherDay = {
     title: "別の日の一覧",
-    date: "2026-11-27",
+    date: "2026-11-25",
     archived: false,
     taskchute: { targetDate: "2026-11-19" },
   };
@@ -2595,17 +2598,14 @@ test("今日の一覧に入っているカードは「今日やる」にまと�
   assert.equal(isInTodayList(archivedToday, today), false);
   assert.equal(isInTodayList(otherDay, today), false);
   const groups = partitionProjectGroups(records, today);
-  assert.deepEqual(
-    groups.inToday.map((row) => row.title),
-    ["今日やる・期日あり", "今日やる・期日なし"]
-  );
+  assert.deepEqual(groups.inToday, []);
   assert.deepEqual(
     groups.dated.map((row) => row.title),
-    ["TaskChuteでない", "別の日の一覧", "期日あり"]
+    ["TaskChuteでない", "別の日の一覧", "今日やる・期日あり", "期日あり"]
   );
   assert.deepEqual(
     groups.undated.map((row) => row.title),
-    ["期日なし"]
+    ["今日やる・期日なし", "期日なし"]
   );
   assert.deepEqual(
     groups.archived.map((row) => row.title),
@@ -2613,7 +2613,7 @@ test("今日の一覧に入っているカードは「今日やる」にまと�
   );
 });
 
-test("「今日やる」の並びは、超過、今日、これから、期日なしの順", () => {
+test("期日ありの並びは、超過、今日、これからの順（期日なしは別セクション）", () => {
   const today = "2026-11-20";
   const inToday = { taskchute: { targetDate: today } };
   const records = [
@@ -2622,14 +2622,20 @@ test("「今日やる」の並びは、超過、今日、これから、期日�
     { title: "超過", date: "2026-11-10", archived: false, ...inToday },
     { title: "今日", date: "2026-11-20", archived: false, ...inToday },
   ];
+  const groups = partitionProjectGroups(records, today);
   assert.deepEqual(
-    partitionProjectGroups(records, today).inToday.map((row) => row.title),
-    ["超過", "今日", "これから", "期日なし"]
+    groups.dated.map((row) => row.title),
+    ["超過", "今日", "これから"]
+  );
+  assert.deepEqual(
+    groups.undated.map((row) => row.title),
+    ["期日なし"]
   );
   assert.deepEqual(partitionProjectGroups([], today), {
     inToday: [],
     dated: [],
     undated: [],
+    waiting: [],
     archived: [],
   });
 });
@@ -2717,14 +2723,8 @@ test("countInTodayProgress and partitionProjectGroups reflect today's TaskChute 
   });
 
   const groups = partitionProjectGroups(records, today, isWorkedToday);
-  assert.deepEqual(
-    groups.inToday.map((r) => r.title),
-    ["未実行・近い", "未実行・先", "実行済み・今日のまま"]
-  );
-  assert.deepEqual(
-    groups.dated.map((r) => r.title),
-    ["実行済み・明日予約"]
-  );
+  assert.deepEqual(groups.inToday, []);
+  assert.equal(groups.dated.length, 4);
 });
 
 test("buildNextDateBadge and hasFutureTargetDate classify target_date states", () => {
@@ -2933,19 +2933,43 @@ test("nextHabitScheduledDate returns next date for daily and interval habits", (
   assert.equal(nextHabitScheduledDate(ended, "2026-11-25", false), null);
 });
 
-test("partitionProjectGroups sorts undated projects by next target_date (overdue -> upcoming -> none)", () => {
+test("partitionProjectGroups sorts undated projects by next target_date (overdue -> upcoming -> none) and moves next-month to waiting", () => {
   const today = "2026-11-26";
   const records = [
     { title: "予定なしB", date: "", archived: false, taskchute: {} },
-    { title: "1週間後", date: "", archived: false, taskchute: { targetDate: "2026-12-03" } },
+    { title: "1週間後（来月）", date: "", archived: false, taskchute: { targetDate: "2026-12-03" } },
     { title: "予定過ぎ", date: "", archived: false, taskchute: { targetDate: "2026-11-24" } },
     { title: "明日", date: "", archived: false, taskchute: { targetDate: "2026-11-27" } },
+    { title: "今月末", date: "", archived: false, taskchute: { targetDate: "2026-11-30" } },
     { title: "予定なしA", date: "", archived: false, taskchute: {} },
   ];
   const groups = partitionProjectGroups(records, today);
   assert.deepEqual(
     groups.undated.map((r) => r.title),
-    ["予定過ぎ", "明日", "1週間後", "予定なしA", "予定なしB"]
+    ["予定過ぎ", "明日", "今月末", "予定なしA", "予定なしB"]
+  );
+  assert.deepEqual(
+    groups.waiting.map((r) => r.title),
+    ["1週間後（来月）"]
+  );
+});
+
+test("partitionProjectGroups keeps due-this-month cards in main even if target_date is next month", () => {
+  const today = "2026-11-26";
+  const records = [
+    { title: "来月予定・来月締切", date: "2026-12-27", archived: false, taskchute: { targetDate: "2026-12-15" } },
+    { title: "来年予定・来年締切", date: "2027-12-01", archived: false, taskchute: { targetDate: "2027-11-27" } },
+    { title: "来月予定・今月締切", date: "2026-11-29", archived: false, taskchute: { targetDate: "2026-12-02" } },
+    { title: "予定日空白・来月締切", date: "2026-12-20", archived: false, taskchute: {} },
+  ];
+  const groups = partitionProjectGroups(records, today);
+  assert.deepEqual(
+    groups.dated.map((r) => r.title),
+    ["来月予定・今月締切", "予定日空白・来月締切"]
+  );
+  assert.deepEqual(
+    groups.waiting.map((r) => r.title),
+    ["来月予定・来月締切", "来年予定・来年締切"]
   );
 });
 
@@ -3014,4 +3038,73 @@ test("collectProjectCategories, filterProjectsByCategory, and resolveProjectCate
     filterProjectsByCategory(records, PROJECT_FILTER_UNCATEGORIZED).map((r) => r.title),
     ["未分類"]
   );
+});
+
+test("TaskChuteのcustomSectionsから現在時刻の枠を計算できる", () => {
+  const sections = [
+    { hour: 0, minute: 0 },
+    { hour: 3, minute: 0 },
+    { hour: 6, minute: 0 },
+    { hour: 9, minute: 0 },
+    { hour: 12, minute: 0 },
+    { hour: 15, minute: 0 },
+    { hour: 18, minute: 0 },
+    { hour: 21, minute: 0 },
+  ];
+  assert.equal(resolveCurrentTaskChuteSlotKey(sections, new Date(2026, 10, 26, 17, 2)), "15:00-18:00");
+  assert.equal(resolveCurrentTaskChuteSlotKey(sections, new Date(2026, 10, 26, 0, 0)), "0:00-3:00");
+  assert.equal(resolveCurrentTaskChuteSlotKey(sections, new Date(2026, 10, 26, 23, 59)), "21:00-0:00");
+  // 未設定でも既定の3時間区切りにフォールバックする
+  assert.equal(resolveCurrentTaskChuteSlotKey(undefined, new Date(2026, 10, 26, 10, 15)), "9:00-12:00");
+});
+
+test("hasScheduledTimeは有効な開始時刻の有無を判定する", () => {
+  assert.equal(hasScheduledTime(undefined), false);
+  assert.equal(hasScheduledTime({}), false);
+  assert.equal(hasScheduledTime({ scheduled_time: "" }), false);
+  assert.equal(hasScheduledTime({ scheduled_time: "9:30" }), true);
+  assert.equal(hasScheduledTime({ scheduled_time: "15:00" }), true);
+  assert.equal(hasScheduledTime({ scheduled_time: "25:00" }), false);
+});
+
+test("assignTaskChuteSlotOverrideは今日のslotOverridesに今の枠を書き込む", async () => {
+  let savedState: Record<string, unknown> | null = null;
+  let invalidatedDate = "";
+  const host: TaskChuteHost = {
+    plugins: {
+      enabledPlugins: new Set(["taskchute-plus"]),
+      plugins: {
+        "taskchute-plus": {
+          dayStateService: {
+            getDateFromKey: (k) => new Date(`${k}T00:00:00`),
+            loadDay: async () => ({}),
+            saveDay: async (_d, s) => {
+              savedState = s;
+            },
+          },
+        },
+      },
+    },
+    workspace: {
+      getLeavesOfType: () => [
+        {
+          view: {
+            invalidateDayStateCache: (k: string) => {
+              invalidatedDate = k;
+            },
+          },
+        },
+      ],
+    },
+  };
+  const ok = await assignTaskChuteSlotOverride(
+    host,
+    "2026-11-26",
+    "tc-task-abc",
+    "TaskChute/Task/sample.md",
+    "15:00-18:00"
+  );
+  assert.equal(ok, true);
+  assert.equal(invalidatedDate, "2026-11-26");
+  assert.equal((savedState as { slotOverrides?: Record<string, string> } | null)?.slotOverrides?.["tc-task-abc"], "15:00-18:00");
 });

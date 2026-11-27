@@ -72,15 +72,19 @@ import {
   taskChuteDeltaPath,
 } from "./src/habit-record";
 import {
+  assignTaskChuteSlotOverride,
   buildTaskChuteFields,
   canReloadTaskChuteView,
   chooseNewRecordFolder,
   generateTaskChuteTaskId,
   getTaskChuteTaskFolder,
   getTaskChuteLogFolder,
+  hasScheduledTime,
   isTaskChuteEnabled,
   readTargetDate,
+  reloadTaskChuteViewAndScrollToSlot,
   reloadTaskChuteViewIfOpen,
+  resolveCurrentTaskChuteSlotKey,
   TASKCHUTE_PLUGIN_ID,
   TASKCHUTE_SHOW_TODAY_COMMAND,
   TaskChuteHost,
@@ -154,6 +158,7 @@ export interface DayspannSettings {
   sectionOrder: DayspannSectionKind[];
   collapsedSections: DayspannSectionKind[];
   undatedCollapsed: boolean;
+  waitingCollapsed: boolean;
   archiveCollapsed: boolean;
   /** 折りたたんだ習慣の見出しのキー。分類の名前、その他は空文字、分類が一つもないときの「習慣」見出しは "*"。 */
   collapsedHabitGroups: string[];
@@ -184,6 +189,7 @@ const DEFAULT_SETTINGS: DayspannSettings = {
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   collapsedSections: [],
   undatedCollapsed: false,
+  waitingCollapsed: true,
   archiveCollapsed: true,
   collapsedHabitGroups: [],
   habitFilter: "all",
@@ -527,9 +533,15 @@ export default class DayspannPlugin extends Plugin {
   async addRecordToTaskChuteToday(record: DayspannRecord): Promise<void> {
     const today = this.todayKey();
     let changed = false;
+    let taskId: string | undefined;
+    let alreadyHasTime = false;
     await this.app.fileManager.processFrontMatter(
       record.file,
       (frontmatter: Record<string, unknown>) => {
+        if (typeof frontmatter.taskId === "string" && frontmatter.taskId.trim()) {
+          taskId = frontmatter.taskId.trim();
+        }
+        alreadyHasTime = hasScheduledTime(frontmatter);
         if (readTargetDate(frontmatter.target_date) === today) return;
         frontmatter.target_date = today;
         changed = true;
@@ -541,9 +553,18 @@ export default class DayspannPlugin extends Plugin {
       return;
     }
 
+    let scrollSlotKey: string | undefined;
+    if (!alreadyHasTime) {
+      const host = this.app as unknown as TaskChuteHost;
+      const customSections = host.plugins?.plugins?.[TASKCHUTE_PLUGIN_ID]?.settings?.customSections;
+      const currentSlot = resolveCurrentTaskChuteSlotKey(customSections);
+      await assignTaskChuteSlotOverride(host, today, taskId, record.file.path, currentSlot);
+      scrollSlotKey = currentSlot;
+    }
+
     new Notice(this.t("notice.addedToday", { title: record.title }));
     await this.refreshViewsAfterWrite(record.file.path);
-    await this.reloadTaskChuteView(record.file, today);
+    await this.reloadTaskChuteView(record.file, today, scrollSlotKey);
   }
 
   /**
@@ -768,11 +789,15 @@ export default class DayspannPlugin extends Plugin {
   }
 
   /** TaskChuteの画面が開いているときだけ「今日のタスクを表示」で読み直す。開いていなければ何もしない（勝手に画面を開かない）。 */
-  private async reloadTaskChuteView(file: TFile, targetDate: string): Promise<void> {
+  private async reloadTaskChuteView(file: TFile, targetDate: string, scrollSlotKey?: string): Promise<void> {
     const host = this.app as unknown as TaskChuteHost;
     if (!canReloadTaskChuteView(host)) return;
     // TaskChuteはメタデータキャッシュから target_date を読むので、キャッシュが新しい日付になるまで少し待つ。
     await this.waitForTargetDate(file, targetDate, 1500);
+    if (scrollSlotKey) {
+      const reloaded = await reloadTaskChuteViewAndScrollToSlot(host.workspace, targetDate, scrollSlotKey);
+      if (reloaded) return;
+    }
     host.commands?.executeCommandById?.(TASKCHUTE_SHOW_TODAY_COMMAND);
   }
 
@@ -1260,6 +1285,11 @@ export default class DayspannPlugin extends Plugin {
     await this.saveSettings();
   }
 
+  async setWaitingCollapsed(collapsed: boolean): Promise<void> {
+    this.settings.waitingCollapsed = collapsed;
+    await this.saveSettings();
+  }
+
   async setArchiveCollapsed(collapsed: boolean): Promise<void> {
     this.settings.archiveCollapsed = collapsed;
     await this.saveSettings();
@@ -1310,6 +1340,7 @@ export default class DayspannPlugin extends Plugin {
       sectionOrder: normalizeSectionOrder(saved?.sectionOrder),
       collapsedSections: normalizeCollapsedSections(saved?.collapsedSections),
       undatedCollapsed: saved?.undatedCollapsed ?? DEFAULT_SETTINGS.undatedCollapsed,
+      waitingCollapsed: saved?.waitingCollapsed ?? DEFAULT_SETTINGS.waitingCollapsed,
       archiveCollapsed: saved?.archiveCollapsed ?? DEFAULT_SETTINGS.archiveCollapsed,
       collapsedHabitGroups: normalizeCollapsedHabitGroups(saved?.collapsedHabitGroups),
       habitFilter: normalizeHabitFilter(saved?.habitFilter),

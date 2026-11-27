@@ -271,45 +271,58 @@ export interface ProjectGroups<T extends ProjectGroupRecord> {
   inToday: T[];
   dated: T[];
   undated: T[];
+  waiting: T[];
   archived: T[];
 }
 
 /**
- * 完了していない、かつ今日の一覧に入っているカードを「今日やる」へ。期日順・期日なしには出さない。
+ * 「待機中（来月以降）」に入れるか。
+ * 次回予定日（target_date）が来月以降で、かつ締切（date）も今月以前ではない（来月以降または空）とき true。
+ * 予定日が空白、今月内、または締切が今月以内のカードはメイン一覧に残す。
+ */
+export function isWaitingProject(record: ProjectGroupRecord, todayKey: string): boolean {
+  if (record.archived) return false;
+  const target = record.taskchute?.targetDate;
+  if (!target || !parseDateKey(target) || !parseDateKey(todayKey)) return false;
+  const todayMonth = todayKey.slice(0, 7);
+  if (target.slice(0, 7) <= todayMonth) return false;
+  if (parseDateKey(record.date) && record.date.slice(0, 7) <= todayMonth) return false;
+  return true;
+}
+
+/**
+ * プロジェクトを見出しごとに分ける。
+ * 今日 TaskChute に入っているカードも「今日やる」見出しには分けず、期日順・期日なしに並べる（カード上の「✓ 今日」で区別）。
+ * 次回予定日が来月以降のカード（締切が今月以内のものを除く）は「待機中（来月以降）」へ。
  * 完了したカードはアーカイブへ。
- * 今日やるの中は「今日まだ」を上、「今日やった」を下にし、同じ状態なら compareProjectByDue。
  */
 export function partitionProjectGroups<T extends ProjectGroupRecord>(
   records: T[],
   todayKey: string,
-  isWorkedToday: (record: T) => boolean = () => false
+  _isWorkedToday: (record: T) => boolean = () => false
 ): ProjectGroups<T> {
   const inToday: T[] = [];
   const dated: T[] = [];
   const undated: T[] = [];
+  const waiting: T[] = [];
   const archived: T[] = [];
   for (const record of records) {
     if (record.archived) {
       archived.push(record);
       continue;
     }
-    if (isInTodayList(record, todayKey)) {
-      inToday.push(record);
+    if (isWaitingProject(record, todayKey)) {
+      waiting.push(record);
       continue;
     }
     if (parseDateKey(record.date)) dated.push(record);
     else undated.push(record);
   }
-  inToday.sort((left, right) => {
-    const leftWorked = isWorkedToday(left) ? 1 : 0;
-    const rightWorked = isWorkedToday(right) ? 1 : 0;
-    if (leftWorked !== rightWorked) return leftWorked - rightWorked;
-    return compareProjectByDue(left, right, todayKey);
-  });
   dated.sort((left, right) => compareProjectByDue(left, right, todayKey));
   undated.sort((left, right) => compareProjectByTargetDate(left, right, todayKey));
+  waiting.sort((left, right) => compareProjectByTargetDate(left, right, todayKey));
   archived.sort((left, right) =>
     compareArchiveOrder(left.completed, right.completed, left.date, right.date)
   );
-  return { inToday, dated, undated, archived };
+  return { inToday, dated, undated, waiting, archived };
 }

@@ -32,7 +32,6 @@ import { findPjSpanEntries } from "./habit-record";
 import {
   buildNextDateBadge,
   collectProjectCategories,
-  countInTodayProgress,
   countProjectSummary,
   filterProjectsByCategory,
   hasFutureTargetDate,
@@ -42,8 +41,6 @@ import {
   PROJECT_FILTER_UNCATEGORIZED,
   resolveProjectCategoryColor,
   resolveProjectCategoryFilter,
-  shouldShowInTodaySection,
-  type InTodayProgress,
   type NextDateBadgeModel,
 } from "./project-groups";
 import { cardFlipKey, collectFlipRects, FLIP_KEY_ATTR, playFlipTransition, prefersReducedMotion, sectionFlipKey } from "./smooth-refresh";
@@ -75,7 +72,7 @@ interface CountedRecord {
   showCategory?: boolean;
 }
 
-type ViewSectionKind = DayspannSectionKind | "undated" | "archive";
+type ViewSectionKind = DayspannSectionKind | "undated" | "waiting" | "archive";
 
 export class DayspannView extends ItemView {
   private refreshVersion = 0;
@@ -258,9 +255,8 @@ export class DayspannView extends ItemView {
     const isWorkedToday = (record: DayspannRecord): boolean => workedTodayPaths.has(record.file.path);
     const showCategoryBadge = activeProjectFilter === PROJECT_FILTER_ALL && projectCategories.length > 0;
 
-    // 今日の一覧に入っているカードは「今日やる」へ。期日順・期日なしには出さない。完了はアーカイブへ。
+    // 「今日やる」見出しは出さず、期日順・期日なし・待機中（来月以降）・アーカイブで並べる。
     const groups = partitionProjectGroups(filteredRecords, today, isWorkedToday);
-    const inTodayProgress = countInTodayProgress(filteredRecords, today, isWorkedToday);
     const toCounted = (list: typeof records): CountedRecord[] =>
       list.map((record) => ({
         record,
@@ -269,15 +265,6 @@ export class DayspannView extends ItemView {
         showCategory: showCategoryBadge,
       }));
     void counted;
-
-    this.renderSection(
-      root,
-      "sun",
-      this.plugin.t("section.inToday"),
-      "inToday",
-      toCounted(groups.inToday),
-      inTodayProgress
-    );
 
     this.renderSection(
       root,
@@ -293,6 +280,14 @@ export class DayspannView extends ItemView {
       this.plugin.t("section.undated"),
       "undated",
       toCounted(groups.undated)
+    );
+
+    this.renderSection(
+      root,
+      "clock",
+      this.plugin.t("section.waiting"),
+      "waiting",
+      toCounted(groups.waiting)
     );
 
     this.renderArchiveSection(root, toCounted(groups.archived), today);
@@ -1040,24 +1035,20 @@ export class DayspannView extends ItemView {
     icon: string,
     title: string,
     kind: ViewSectionKind,
-    items: CountedRecord[],
-    inTodayProgress?: InTodayProgress
+    items: CountedRecord[]
   ): void {
-    // 「今日やる」は、残りも今日の完了も 0 のときだけ出さない。全部終わった日は見出しを残す。
-    if (kind === "inToday") {
-      if (!inTodayProgress || !shouldShowInTodaySection(inTodayProgress)) return;
-    } else if (!items.length) {
-      return;
-    }
+    if (!items.length) return;
     const section = root.createEl("section", {
       cls: `dayspann-section dayspann-section--${kind}`,
     });
     const collapsed =
       kind === "archive"
         ? this.plugin.settings.archiveCollapsed
-        : kind === "undated"
-          ? this.plugin.settings.undatedCollapsed
-          : this.plugin.settings.collapsedSections.includes(kind);
+        : kind === "waiting"
+          ? this.plugin.settings.waitingCollapsed
+          : kind === "undated"
+            ? this.plugin.settings.undatedCollapsed
+            : this.plugin.settings.collapsedSections.includes(kind);
     section.toggleClass("dayspann-section--collapsed", collapsed);
 
     const listId = `dayspann-list-${this.viewId}-${kind}`;
@@ -1075,22 +1066,9 @@ export class DayspannView extends ItemView {
     });
     this.setFlipKey(heading, sectionFlipKey(kind));
     setIcon(heading.createSpan("dayspann-section-icon"), icon);
-    if (kind === "inToday" && inTodayProgress) {
-      const label = heading.createSpan("dayspann-section-label");
-      label.createSpan({ text: title, cls: "dayspann-section-title" });
-      const progressText =
-        inTodayProgress.remaining === 0
-          ? this.plugin.t("section.inTodayAllDone")
-          : this.plugin.t("section.inTodayProgress", {
-              remaining: inTodayProgress.remaining,
-              done: inTodayProgress.doneToday,
-            });
-      label.createSpan({ text: progressText, cls: "dayspann-section-progress" });
-    } else {
-      heading.createSpan({
-        text: this.plugin.t("section.heading", { title, count: items.length }),
-      });
-    }
+    heading.createSpan({
+      text: this.plugin.t("section.heading", { title, count: items.length }),
+    });
     heading.createSpan("dayspann-section-line");
     setIcon(heading.createSpan("dayspann-section-chevron"), "chevron-down");
 
@@ -1112,6 +1090,8 @@ export class DayspannView extends ItemView {
       );
       if (kind === "archive") {
         void this.plugin.setArchiveCollapsed(nextCollapsed);
+      } else if (kind === "waiting") {
+        void this.plugin.setWaitingCollapsed(nextCollapsed);
       } else if (kind === "undated") {
         void this.plugin.setUndatedCollapsed(nextCollapsed);
       } else {
