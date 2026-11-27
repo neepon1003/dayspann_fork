@@ -267,6 +267,29 @@ export function compareProjectByTargetDate(
   );
 }
 
+/** 次回予定日（予定過ぎ→今日→これから→予定なし）を第1キー、同じなら期日順、さらに同じなら名前順。 */
+export function compareProjectByTargetThenDue(
+  left: ProjectGroupRecord,
+  right: ProjectGroupRecord,
+  todayKey: string
+): number {
+  const leftTarget = left.taskchute?.targetDate ?? "";
+  const rightTarget = right.taskchute?.targetDate ?? "";
+  const leftHas = Boolean(parseDateKey(leftTarget));
+  const rightHas = Boolean(parseDateKey(rightTarget));
+  if (leftHas !== rightHas) return leftHas ? -1 : 1;
+  if (leftHas && rightHas) {
+    const byTarget = compareByDueDifference(
+      differenceInCalendarDays(leftTarget, todayKey),
+      leftTarget,
+      differenceInCalendarDays(rightTarget, todayKey),
+      rightTarget
+    );
+    if (byTarget !== 0) return byTarget;
+  }
+  return compareProjectByDue(left, right, todayKey);
+}
+
 export interface ProjectGroups<T extends ProjectGroupRecord> {
   inToday: T[];
   dated: T[];
@@ -318,9 +341,9 @@ export function partitionProjectGroups<T extends ProjectGroupRecord>(
     if (parseDateKey(record.date)) dated.push(record);
     else undated.push(record);
   }
-  dated.sort((left, right) => compareProjectByDue(left, right, todayKey));
+  dated.sort((left, right) => compareProjectByTargetThenDue(left, right, todayKey));
   undated.sort((left, right) => compareProjectByTargetDate(left, right, todayKey));
-  waiting.sort((left, right) => compareProjectByTargetDate(left, right, todayKey));
+  waiting.sort((left, right) => compareProjectByTargetThenDue(left, right, todayKey));
   archived.sort((left, right) =>
     compareArchiveOrder(left.completed, right.completed, left.date, right.date)
   );

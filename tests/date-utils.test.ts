@@ -366,8 +366,8 @@ test("Obsidianの日本語設定だけを日本語として扱い、それ以外
 });
 
 test("日本語と英語の表示文言を切り替える", () => {
-  assert.equal(createTranslator("ja")("section.due"), "期日順");
-  assert.equal(createTranslator("en")("section.due"), "By due date");
+  assert.equal(createTranslator("ja")("section.due"), "今月");
+  assert.equal(createTranslator("en")("section.due"), "This month");
   assert.equal(createTranslator("ja")("section.inToday"), "今日やる");
   assert.equal(createTranslator("en")("section.inToday"), "Do today");
   assert.equal(createTranslator("ja")("section.heading", { title: "今日やる", count: 1 }), "今日やる（1）");
@@ -2601,7 +2601,7 @@ test("今日の一覧に入っているカードも「今日やる」には分�
   assert.deepEqual(groups.inToday, []);
   assert.deepEqual(
     groups.dated.map((row) => row.title),
-    ["TaskChuteでない", "別の日の一覧", "今日やる・期日あり", "期日あり"]
+    ["別の日の一覧", "今日やる・期日あり", "TaskChuteでない", "期日あり"]
   );
   assert.deepEqual(
     groups.undated.map((row) => row.title),
@@ -2970,6 +2970,22 @@ test("partitionProjectGroups keeps due-this-month cards in main even if target_d
   assert.deepEqual(
     groups.waiting.map((r) => r.title),
     ["来月予定・来月締切", "来年予定・来年締切"]
+  );
+});
+
+test("partitionProjectGroups sorts dated projects by next target_date first, then due date", () => {
+  const today = "2026-11-27";
+  const records = [
+    { title: "明日・期日遠い", date: "2028-04-01", archived: false, taskchute: { targetDate: "2026-11-28" } },
+    { title: "予定なし・期日近い", date: "2026-12-01", archived: false, taskchute: {} },
+    { title: "今日・期日普通", date: "2026-12-05", archived: false, taskchute: { targetDate: "2026-11-27" } },
+    { title: "明日・期日近い", date: "2026-11-28", archived: false, taskchute: { targetDate: "2026-11-28" } },
+    { title: "予定過ぎ", date: "2026-12-10", archived: false, taskchute: { targetDate: "2026-11-25" } },
+  ];
+  const groups = partitionProjectGroups(records, today);
+  assert.deepEqual(
+    groups.dated.map((r) => r.title),
+    ["予定過ぎ", "今日・期日普通", "明日・期日近い", "明日・期日遠い", "予定なし・期日近い"]
   );
 });
 
